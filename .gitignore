@@ -2,6 +2,7 @@ AnalisisItem/Doc/
 AnalisisItem/Output/
 AnalisisItem/Src/bin/
 AnalisisItem/Src/.Rhistory
+*.sav*
 *.docx*
 *.txt*
 *.csv*
