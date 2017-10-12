@@ -163,6 +163,9 @@ for (ii in 1:nrow(escalaWLE)){
 ################################################################################
 # # Construcción de agregados
 ################################################################################
+# # Variable Repitente
+isNOREP  <- filACP[, "X15.ST127.A"] == "1" & filACP[, "X15.ST127.B"] == "1" &
+            filACP[, "X15.ST127.C"] == "1" 
 
 varsAux <- lapply(armaAgr[, "auxAgre"], function(x) strsplit(x, "-")[[1]])
 varsAux <- unique(sapply(varsAux, function(x) x[length(x)]))
