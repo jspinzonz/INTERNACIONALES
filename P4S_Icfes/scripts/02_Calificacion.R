@@ -166,7 +166,9 @@ for (ii in 1:nrow(escalaWLE)){
 # # Variable Repitente
 isNOREP  <- filACP[, "X15.ST127.A"] == "1" & filACP[, "X15.ST127.B"] == "1" &
             filACP[, "X15.ST127.C"] == "1" 
+filACP[, "REPETIDORES"] <- ifelse(isNOREP, 0, 1)
 
+# # Filtrar variables
 varsAux <- lapply(armaAgr[, "auxAgre"], function(x) strsplit(x, "-")[[1]])
 varsAux <- unique(sapply(varsAux, function(x) x[length(x)]))
 varsAux <- subset(filACP, select = c("STUDENT_ID", intersect(varsAux, 
