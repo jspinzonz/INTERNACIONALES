@@ -139,6 +139,16 @@ for (ii in 1:nrow(infoCal)) {
                                                        "GENDER", "GRADE")))
 }
 
+# # Asigna Niveles de desempeño según la escala de puntaje PISA 
+
+listDatNiv <- lapply(resultPFS, function(x) x[,c("SCHOOL_ID", "STUDENT_ID", "PV_Mean")])
+listDatNiv <- lapply(listDatNiv, lev_P4S)
+listDatNiv <- dcast.data.table(rbindlist(listDatNiv, idcol = "PRUEBA"), 
+                            SCHOOL_ID + STUDENT_ID ~ PRUEBA, 
+                            value.var = "LevelP4S")
+names(listDatNiv)[3:5] <- paste0("NIV_", names(listDatNiv)[3:5])
+
+		     
 ################################################################################
 # # Construcción de Indices
 ################################################################################
@@ -181,7 +191,9 @@ infoIndice <- cbind(infoIndice,
                     PERFILLECTOR =  round(runif(676, 1, 4)),
                     PERCENTIL_PAIS = sample(c("P10", "P25", "P75", "P90"), 676, replace = TRUE),
                     SECTOR = sample(c("OFICIAL", "URBANO", "NO OFICIAL", "RURAL"), 676, replace = TRUE))
-
+infoIndice <- merge(infoIndice, listDatNiv, 
+                    by.x = c("SCHOOL_ID", "STUDENT_ID"), 
+                    by.y = c("SCHOOL_ID", "STUDENT_ID"))
 
 # # Caculo de agregados
 tableResult <- list()
