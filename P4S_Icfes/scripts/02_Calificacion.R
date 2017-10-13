@@ -36,7 +36,7 @@ library(dplyr)
 library(GDAtools)
 library(survey)
 library(Hmisc)
-
+library(lme4)
 
 ###############################################################################
 # # Cargar funciones para la calificacion
@@ -87,7 +87,7 @@ nReal  <- data.table(read.table(fileNR, header = T, sep = "\t", dec = ","))
 
 # # Lectura de agregados por calcular
 fileAux <- file.path(inPath, "estructuraTablas.xlsx")
-armaAgr <- xlsx::read.xlsx(fileAux, sheetName = "Agregados", 
+armaAgr <- xlsx::read.xlsx(fileAux, sheetName = "AgregadosP4S", 
                              stringsAsFactors = FALSE)
 
 
@@ -186,11 +186,12 @@ varsAux <- subset(filACP, select = c("STUDENT_ID", intersect(varsAux,
                   names(filACP))))
 infoIndice <- merge(varsAux, dplyr::select(bdTAM, SCHOOL_ID:edadM), by = colID)
 			 
-## asignacion de percentil y decil de los estudiantes por colegio
+# # asignacion de percentil y decil de los estudiantes por colegio
 cuarDecil<- cuarDec(resultPFS, wrFay)
 
 # # Lectura de niveles de agregación
-infoIndice <- cbind(infoIndice, 
+infoIndice <- cbind(infoIndice,
+                    ESCS = round(rnorm(676, 48, 11)),
                     REPETIDORES =  round(runif(676, 1, 4)),
                     PERFILLECTOR =  round(runif(676, 1, 4)),
                     PERCENTIL_PAIS = sample(c("P10", "P25", "P75", "P90"), 676, replace = TRUE),
@@ -198,7 +199,7 @@ infoIndice <- cbind(infoIndice,
 infoIndice <- merge(infoIndice, listDatNiv, 
                     by.x = c("SCHOOL_ID", "STUDENT_ID"), 
                     by.y = c("SCHOOL_ID", "STUDENT_ID"))		 
-infoIndice <- merge(infoIndice, cuarDecil, by=c("SCHOOL_ID", "STUDENT_ID") )			 
+infoIndice <- merge(infoIndice, cuarDecil, by=c("SCHOOL_ID", "STUDENT_ID"))
 
 # # Caculo de agregados
 tableResult <- list()
