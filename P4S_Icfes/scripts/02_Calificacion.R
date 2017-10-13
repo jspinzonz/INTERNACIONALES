@@ -42,6 +42,7 @@ library(lme4)
 # # Cargar funciones para la calificacion
 ################################################################################
 source(file.path(funPath, "scoreFunctions.R"))
+source(file.path(funPath, "Levels.R"))
 
 ################################################################################
 # # Insumos del proceso
