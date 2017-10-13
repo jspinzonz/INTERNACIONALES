@@ -51,7 +51,7 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
   resultEst  <- list() 
 
   # # Si se debe calcular un porcentaje
-  regxCols <- ifelse(funAgre == "Promedio", "PV\\d", "data\\.")
+  regxCols <- ifelse(funAgre %in% c("Promedio", "Promedio/ESCS"), "PV\\d", "data\\.")
   varCat   <- byVars[!byVars %in% c("SCHOOL_ID")]
   if (length(varCat) == 0 & funAgre == "Porcentaje"){
     stop("Se debe definir al menos una variable de categorias (Funcion Porcentaje)")
@@ -71,6 +71,23 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
                          by = idAux)
         # # Calculo de media por replica y valor plausible
         namesCols <- grep(regxCols, names(datTest), value = TRUE)
+        auxMultiReg <- function(data, byVars) {
+          infoWei <- data[, .SD, .SDcols = grep("Weight_", names(data))]
+          infoPV  <- data[, .SD, .SDcols = namesCols]
+          fullDat <- cbind(infoPV, infoWei, data[, .SD, .SDcols = byVars])
+          listOut <- list()
+          lapply(names(infoPV), function(itPV){
+            lapply(names(infoWei), function(itWGT){
+              tempDat <- fullDat[, .SD, .SDcols = c(byVars, itPV, itWGT)]
+              modEst <- multilevelPISA(tempDat, itPV, byVars[1], byVars[2], itWGT)
+              datOut <- cbind("PV" = itPV, "Replica" = itWGT, modEst)
+              listOut[[paste(itPV, itWGT, sep = "-")]] <<- datOut
+            })
+          })
+          datTB <- rbindlist(listOut, fill = TRUE)
+          datOut <- dcast.data.table(datTB, Replica + SCHOOL_ID + N ~ PV, value.var = "Intercept")
+          return(datOut)
+        }
         auxMean <- function(datAux) {
             nrowAux <- nrow(datAux)
             infoWei <- datAux[, .SD, .SDcols = grep("Weight_", names(datAux))]
@@ -84,7 +101,13 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
                   data.table(datAux))
         }
         # # Calculo del error de estimación
-        datAux <- datTest[, auxMean(.SD), by = byVars]
+        if (funAgre == "Promedio/ESCS") {
+          datAux <- datTest[, auxMultiReg(.SD, byVars)]
+          initByVar <- byVars
+          byVars <- byVars[1]
+        } else {
+          datAux <- datTest[, auxMean(.SD), by = byVars]
+        }
         auxEst <- datAux[Replica == "Weight_81", ]
         auxSEE <- datAux[Replica != "Weight_81",  lapply(.SD, sse_P4S), 
                          by = byVars, .SDcols = namesCols]
@@ -94,10 +117,10 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
          auxEst[, CATEGORIA := gsub("data\\.", "", variable)]
          auxSEE[, CATEGORIA := gsub("data\\.", "", variable)]
         } 
-        if (funAgre == "Promedio") {
+        if (funAgre %in% c("Promedio", "Promedio/ESCS")) {
           auxEst[, ESTIMACION := rowMeans(select(auxEst, starts_with("PV")))]
           auxSEE[, SSE := rowMeans(select(auxSEE, starts_with("PV")))]
-          if (length(varCat) > 0){
+          if (length(varCat) > 0 & funAgre != "Promedio/ESCS"){
             auxEst[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
             auxSEE[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
           } else {
@@ -106,7 +129,7 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
           }
         }
         # # Arreglando salida
-        testCol <- ifelse(funAgre == "Promedio", testX, "NULL")
+        testCol <- ifelse(funAgre %in% c("Promedio", "Promedio/ESCS"), testX, "NULL")
         if (length(byTests) == 1)
           testCol <- byTests
         auxEst  <- auxEst[, cbind('TIPO_AGREGADO' = tipoAgre, 'COD_AGREGADO' = codAgre, 
@@ -115,6 +138,9 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
         resultEst[[testX]] <- merge(auxEst, auxSEE, by = c(byVars, "CATEGORIA"))
         if (verbose)
            cat("...... Termino agregado (", auxAgre, ") para --", testX, "--\n")
+        if(funAgre == "Promedio/ESCS"){
+          byVars <- initByVar
+        }
      }
   } else {
     resultEst <- lapply(names(resultPFS), function(x) {
@@ -374,6 +400,35 @@ calificaIndice <- function(filACP, nomIndic = "MATHEFF",
   return(valIndex)
   # write.table(EndResults,file="MATHEFF_12Actvity.csv",sep = ",",dec=".",row.names = FALSE, col.names = TRUE)
 } 
+
+multilevelPISA <- function(dat, pv, lvl, fixed, wgt){
+  # Extrae registros con valores faltantes
+  naCodes <- c("", "M", "N", "I")
+  condNA <- dat[eval(parse(text=fixed)) %in% naCodes, ]
+  dat <- dat[!condNA, ]
+
+  dat[ ,"lvl"] <- dat[ , lvl, with = FALSE]
+  dat[ ,"wgt"] <- dat[ , wgt, with = FALSE]
+  datTemp <- dat %>%
+        group_by(lvl) %>%
+        summarise(sumWgt = sum(wgt),
+                  nbre = n()) %>%
+        setnames("lvl", "SCHOOL_ID")
+
+  temp <- merge(dat, datTemp, by = lvl)
+  # Ajuste de pesos
+  temp[, "std_wgt"] <- (temp[, wgt, with = FALSE] * temp[, nbre])/temp[, sumWgt]
+
+  # temp <- full_join(dat, datTemp, by = lvl)
+  form <- formula(paste0(pv, " ~ ", fixed, " + (1|", lvl, ")"))
+  fit <- lmer(form, data = temp, weights=std_wgt, REML = FALSE)
+  fijos <- as.numeric(fixef(fit))[1]
+  randEffect <- ranef(fit, condVar = TRUE)[[1]]
+  names(randEffect) <- "Intercept"
+  finalEst <- fijos + randEffect
+  out <- data.table(datTemp[, "SCHOOL_ID"], "N" = datTemp$nbre, finalEst)
+  return(out)
+}
 
 # consoInfo <- function() {
 
