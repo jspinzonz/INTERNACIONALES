@@ -196,8 +196,8 @@ infoIndice <- cbind(infoIndice,
                     PERFILLECTOR =  round(runif(676, 1, 4)),
                     PERCENTIL_PAIS = sample(c("P10", "P25", "P75", "P90"), 676, replace = TRUE),
                     SECTOR = sample(c("OFICIAL", "URBANO", "NO OFICIAL", "RURAL"), 676, replace = TRUE))
-infoIndice <- merge(merge(infoIndice, listDatNiv, by = c("SCHOOL_ID", "STUDENT_ID")), 
-                                       cuarDecil, by = c("SCHOOL_ID", "STUDENT_ID"))
+infoIndice <- merge(merge(infoIndice, listDatNiv, by = colID), 
+                                       cuarDecil, by = colID)
 
 # # Caculo de agregados
 tableResult <- list()
