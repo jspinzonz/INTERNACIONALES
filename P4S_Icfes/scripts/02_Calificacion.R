@@ -35,6 +35,7 @@ library(TAM)
 library(dplyr)
 library(GDAtools)
 library(survey)
+library(Hmisc)
 
 
 ###############################################################################
@@ -184,6 +185,9 @@ varsAux <- unique(sapply(varsAux, function(x) x[length(x)]))
 varsAux <- subset(filACP, select = c("STUDENT_ID", intersect(varsAux, 
                   names(filACP))))
 infoIndice <- merge(varsAux, dplyr::select(bdTAM, SCHOOL_ID:edadM), by = colID)
+			 
+## asignacion de percentil y decil de los estudiantes por colegio
+cuarDecil<- cuarDec(resultPFS, wrFay)
 
 # # Lectura de niveles de agregación
 infoIndice <- cbind(infoIndice, 
@@ -193,7 +197,8 @@ infoIndice <- cbind(infoIndice,
                     SECTOR = sample(c("OFICIAL", "URBANO", "NO OFICIAL", "RURAL"), 676, replace = TRUE))
 infoIndice <- merge(infoIndice, listDatNiv, 
                     by.x = c("SCHOOL_ID", "STUDENT_ID"), 
-                    by.y = c("SCHOOL_ID", "STUDENT_ID"))
+                    by.y = c("SCHOOL_ID", "STUDENT_ID"))		 
+infoIndice <- merge(infoIndice, cuarDecil, by=c("SCHOOL_ID", "STUDENT_ID") )			 
 
 # # Caculo de agregados
 tableResult <- list()
