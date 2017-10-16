@@ -19,8 +19,16 @@
 ################################################################################
 options(encoding = "UTF-8")
 
-sse_P4S <- function(x, muReal = mean(x)){
-  sqrt(sum((x - muReal) ^ 2) / 20)
+rowVars <- function (x, na.rm = TRUE) 
+{
+    sqr = function(x) x * x
+    n = rowSums(!is.na(x))
+    n[n <= 1] = NA
+    return(rowSums(sqr(x - rowMeans(x,na.rm = na.rm)), na.rm = na.rm)/(n - 1))
+}
+
+VAR_P4S <- function(x, muReal = x[81]){
+  return(sum((x[-81] - muReal) ^ 2) / 20)
 }
 
 computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
@@ -101,6 +109,9 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
                   data.table(datAux))
         }
         # # Calculo del error de estimación
+        listLinkSEE <- list('LECTURA' = 8.132, 
+                            'CIENCIAS' = 11.188, 
+                            'MATEMATICAS' = 10.101)        
         if (funAgre == "Promedio/ESCS") {
           datAux <- datTest[, auxMultiReg(.SD, byVars)]
           initByVar <- byVars
@@ -109,7 +120,7 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
           datAux <- datTest[, auxMean(.SD), by = byVars]
         }
         auxEst <- datAux[Replica == "Weight_81", ]
-        auxSEE <- datAux[Replica != "Weight_81",  lapply(.SD, sse_P4S), 
+        auxSEE <- datAux[Replica != "Weight_81",  lapply(.SD, VAR_P4S), 
                          by = byVars, .SDcols = namesCols]
         if (funAgre == "Porcentaje") {
          auxEst <- melt(auxEst, id = c(byVars, "N", "Replica"), value.name = "ESTIMACION")
@@ -119,7 +130,9 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
         } 
         if (funAgre %in% c("Promedio", "Promedio/ESCS")) {
           auxEst[, ESTIMACION := rowMeans(select(auxEst, starts_with("PV")))]
-          auxSEE[, SSE := rowMeans(select(auxSEE, starts_with("PV")))]
+          auxEst[, VAR_measure := rowVars(select(auxEst, starts_with("PV")))]
+          auxSEE[, VAR_sam := rowMeans(select(auxSEE, starts_with("PV")))]
+          auxSEE[, VAR_link := listLinkSEE[[testX]]]
           if (length(varCat) > 0 & funAgre != "Promedio/ESCS"){
             auxEst[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
             auxSEE[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
@@ -134,7 +147,7 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
           testCol <- byTests
         auxEst  <- auxEst[, cbind('TIPO_AGREGADO' = tipoAgre, 'COD_AGREGADO' = codAgre, 
                                   'PRUEBA' = testCol, .SD), 
-                          .SDcols = c(byVars, "CATEGORIA", "N", "ESTIMACION")]
+                          .SDcols = c(byVars, "CATEGORIA", "N", "ESTIMACION", "VAR_measure")]
         resultEst[[testX]] <- merge(auxEst, auxSEE, by = c(byVars, "CATEGORIA"))
         if (verbose)
            cat("...... Termino agregado (", auxAgre, ") para --", testX, "--\n")
@@ -154,13 +167,16 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
   resultEst <- rbindlist(resultEst)
 
   # # Ajustar columnas en el reporte FINAL
-  colFix <- c("SCHOOL_ID", "CATEGORIA", "SSE")
+  resultEst[, SSE_LIN := sqrt(1.2 * VAR_measure + VAR_sam + VAR_link)]
+  resultEst[, SSE_NLIN := sqrt(1.2 * VAR_measure + VAR_sam)]
+  colFix <- c("SCHOOL_ID", "CATEGORIA", "SSE_NLIN", "SSE_LIN")
   colFix <- colFix[!colFix %in% names(resultEst)]
   if (length(colFix) > 0){ 
     resultEst[, (colFix) := "NULL"] 
   }
   resultEst <- resultEst[, .(TIPO_AGREGADO, COD_AGREGADO, CATEGORIA, 
-                             SCHOOL_ID, PRUEBA, N, ESTIMACION, SSE)]
+                             SCHOOL_ID, PRUEBA, N, ESTIMACION, SSE_NLIN, 
+                             SSE_LIN)]
   return(resultEst)
 }
 
