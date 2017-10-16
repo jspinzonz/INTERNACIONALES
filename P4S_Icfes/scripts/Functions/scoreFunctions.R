@@ -120,8 +120,8 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
           datAux <- datTest[, auxMean(.SD), by = byVars]
         }
         auxEst <- datAux[Replica == "Weight_81", ]
-        auxSEE <- datAux[Replica != "Weight_81",  lapply(.SD, VAR_P4S), 
-                         by = byVars, .SDcols = namesCols]
+        auxSEE <- datAux[, lapply(.SD, VAR_P4S), by = byVars, 
+                        .SDcols = namesCols]
         if (funAgre == "Porcentaje") {
          auxEst <- melt(auxEst, id = c(byVars, "N", "Replica"), value.name = "ESTIMACION")
          auxSEE <- melt(auxSEE, id = byVars, value.name = "SSE")
