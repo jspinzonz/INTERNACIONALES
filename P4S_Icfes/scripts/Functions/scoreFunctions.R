@@ -124,9 +124,12 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
                         .SDcols = namesCols]
         if (funAgre == "Porcentaje") {
          auxEst <- melt(auxEst, id = c(byVars, "N", "Replica"), value.name = "ESTIMACION")
-         auxSEE <- melt(auxSEE, id = byVars, value.name = "SSE")
+         auxSEE <- melt(auxSEE, id = byVars, value.name = "VAR_sam")
+         auxEst[, VAR_measure := 0]
+         auxSEE[, VAR_link := 0]
          auxEst[, CATEGORIA := gsub("data\\.", "", variable)]
          auxSEE[, CATEGORIA := gsub("data\\.", "", variable)]
+
         } 
         if (funAgre %in% c("Promedio", "Promedio/ESCS")) {
           auxEst[, ESTIMACION := rowMeans(select(auxEst, starts_with("PV")))]
@@ -163,11 +166,14 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
                                             'PRUEBA' = x, 'N' = .N, 
                                             'ESTIMACION' = median(PV_Mean)
                                             ), by = byVars]})
+    resultEst <- lapply(resultEst, function(x) 
+                        cbind(x, VAR_measure = 0, VAR_sam = 0,
+                        VAR_link = 0))
   }
   resultEst <- rbindlist(resultEst)
 
   # # Ajustar columnas en el reporte FINAL
-  resultEst[, SSE_LIN := sqrt(1.2 * VAR_measure + VAR_sam + VAR_link)]
+  resultEst[, SSE_LIN  := sqrt(1.2 * VAR_measure + VAR_sam + VAR_link)]
   resultEst[, SSE_NLIN := sqrt(1.2 * VAR_measure + VAR_sam)]
   colFix <- c("SCHOOL_ID", "CATEGORIA", "SSE_NLIN", "SSE_LIN")
   colFix <- colFix[!colFix %in% names(resultEst)]
@@ -179,7 +185,6 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
                              SSE_LIN)]
   return(resultEst)
 }
-
 
 recodeFun <- function(z, recodeTbl, flagVerbose = FALSE, recodeNA = "99"){ 
   auxHISEI <- unname(setNames(recodeTbl$codFin, recodeTbl$codOri)[as.character(z)])
