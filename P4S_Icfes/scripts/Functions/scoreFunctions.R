@@ -451,6 +451,51 @@ multilevelPISA <- function(dat, pv, lvl, fixed, wgt){
   return(out)
 }
 
+readerProfiles <- function(datInt, outPath){
+  # Dicotomiza las variables de interes
+  idDat <- datInt[, .SD, .SDcols = c("SCHOOL_ID", "STUDENT_ID")]
+  varNames <- c("magazine", "comic", "fiction", "nonfic", "news")
+  specDicom <- function(x) {
+    ifelse(x <= 2, 1, 0)
+  }
+  dicomDat <- datInt[, lapply(.SD, specDicom), .SDcols = grep("ST25", names(datInt), value= TRUE)]
+  names(dicomDat) <- varNames
+
+  # # Recordar y entender
+  # condiciones para UNDREM var
+  recordar <- datInt[, .SD, .SDcols = grep("ST41", names(datInt), value = TRUE)]
+  condUNDREM <- c("(X09.ST41.C > X09.ST41.A)", "(X09.ST41.C > X09.ST41.B)",
+                  "(X09.ST41.C > X09.ST41.F)", "(X09.ST41.D > X09.ST41.A)",
+                  "(X09.ST41.D > X09.ST41.B)", "(X09.ST41.D > X09.ST41.F)",
+                  "(X09.ST41.E > X09.ST41.A)", "(X09.ST41.E > X09.ST41.B)",
+                  "(X09.ST41.E > X09.ST41.F)")
+  lapply(condUNDREM, function(y){
+    recordar[eval(parse(text=y)), paste0("var-", y) := 1, ]
+  })
+  reScale <- function(z, m, s) {
+    stdZ <- (z - mean(z))/sd(z)
+    newZ <- (stdZ*(s) + m)
+    return(newZ)
+  }
+  recordar[, undrem := round(reScale(rowSums(.SD, na.rm = TRUE)/9, 0.57, 0.30), 4), .SDcols = grep("var", names(recordar), value= T)]
+
+  # condiciones para METASUM var
+  entender = datInt[, .SD, .SDcols = grep("ST42", names(datInt), value = TRUE)]
+  condMETASUM <- c("(X09.ST42.D > X09.ST42.A)", "(X09.ST42.D > X09.ST42.B)",
+                   "(X09.ST42.D > X09.ST42.C)", "(X09.ST42.E > X09.ST42.A)",
+                   "(X09.ST42.E > X09.ST42.B)", "(X09.ST42.E > X09.ST42.C)",
+                   "(X09.ST42.A > X09.ST42.B)", "(X09.ST42.C > X09.ST42.B)")
+  lapply(condMETASUM, function(y){
+    entender[eval(parse(text=y)), paste0("var-", y) := 1, ]
+  })
+  entender[, metasum := round(reScale(rowSums(.SD, na.rm = TRUE)/8, 0.60, 0.29), 4), .SDcols = grep("var", names(entender), value= T)]
+
+  datOut <- cbind(idDat, dicomDat, recordar[, "undrem"], entender[, "metasum"])
+  write.table(datOut, file = file.path(outPath, "perfilLector.dat"), 
+            sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+  return(datOut)
+}
+
 # consoInfo <- function() {
 
 # }

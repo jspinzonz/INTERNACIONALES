@@ -150,7 +150,7 @@ listDatNiv <- dcast.data.table(rbindlist(listDatNiv, idcol = "PRUEBA"),
                             value.var = "LevelP4S")
 names(listDatNiv)[3:5] <- paste0("NIV_", names(listDatNiv)[3:5])
 
-		     
+
 ################################################################################
 # # Construcción de Indices
 ################################################################################
@@ -186,25 +186,41 @@ varsAux <- unique(sapply(varsAux, function(x) x[length(x)]))
 varsAux <- subset(filACP, select = c("STUDENT_ID", intersect(varsAux, 
                   names(filACP))))
 infoIndice <- merge(varsAux, dplyr::select(bdTAM, SCHOOL_ID:edadM), by = colID)
-			 
+
 # # asignacion de percentil y decil de los estudiantes por colegio
 cuarDecil<- cuarDec(resultPFS, wrFay)
 
 # # Lectura de niveles de agregación
 infoIndice <- cbind(infoIndice,
                     ESCS = round(rnorm(676, 48, 11)),
-                    PERFILLECTOR =  round(runif(676, 1, 4)),
+                    # PERFILLECTOR =  round(runif(676, 1, 4)),
                     PERCENTIL_PAIS = sample(c("P10", "P25", "P75", "P90"), 676, replace = TRUE),
                     SECTOR = sample(c("OFICIAL", "URBANO", "NO OFICIAL", "RURAL"), 676, replace = TRUE))
 infoIndice <- merge(merge(infoIndice, listDatNiv, by = colID), 
                                        cuarDecil, by = colID)
+
+# # Perfiles Lectores
+intVar <- names(filACP)[names(filACP) %like% "ST25|ST41|ST42"]
+datReadPr <- filACP[, .SD, .SDcols = c(colID, intVar)]
+datBuild <- readerProfiles(datReadPr, outPath)
+# # Lee archivo de salida de MPLUS
+prflsPath <- file.path(inPath, "outputPerfilLector.txt")
+readPrfls <- fread(prflsPath)
+names(readPrfls) <- c("magazin", "comic", "fiction", "nonfic", "news", "undrem",
+                      "metasum", "cprob1", "cprob2", "cprob3", "cprob4", 
+                      "cprob5", "cprob6", "c1", "c2", "PERFILLECTOR")
+
+readPrfls <- cbind(datBuild[, list(SCHOOL_ID, STUDENT_ID)], readPrfls)
+setkey(readPrfls, SCHOOL_ID, STUDENT_ID)
+
+infoIndice <- merge(infoIndice, readPrfls[, list(SCHOOL_ID, STUDENT_ID, PERFILLECTOR)])
 
 # # Caculo de agregados
 tableResult <- list()
 for (ii in (1:nrow(armaAgr))) {
     tableResult[[ii]] <- computeEst(resultPFS, wrFay, infoIndice, 
                                     codAgre = armaAgr[ii, "COD_AGREGADO"],
-                                    byVars  = strsplit(armaAgr[ii, "auxAgre"], "-")[[1]], 
+                                    byVars  = strsplit(armaAgr[ii, "auxAgre"], "-")[[1]],
                                     byTests = strsplit(armaAgr[ii, "PRUEBA"], "\\|")[[1]],
                                     funAgre = armaAgr[ii, "Funcion"])
 }
