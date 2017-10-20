@@ -503,4 +503,113 @@ readerProfiles <- function(datInt, outPath){
 # salidaXLSX <- function(){
 
 # }
+###################################
+# Códigos para el cálculo de ECSC
+###################################
+                         
+computePARED <- function(dataACP, colPARED = c("X15.ST005", "X15.ST006.A", "X15.ST006.B", "X15.ST006.C",
+                                                "X15.ST007", "X15.ST008.A", "X15.ST008.B", "X15.ST008.C")){
+  dataACP <- data.table(dataACP)
+  datPARED  <- dataACP[, colPARED, with = FALSE]
 
+  # # Recodificación
+  # variables X15.ST005 y X15.ST007 
+  # Cuestionario                | ISCED | Recodificación
+  # -------------------------------------------------------             
+  # No completo primaria        | None  | 0
+  # Básica primaria             | 1     | 1
+  # Básica secundaria (6 - 9)   | 2     | 2
+  # Educación media (10 - 11)   | 3A    | 4
+
+  recode1 <- tibble(codOri = c(4:1, 5, 6, 7, 8, 9, "r"), 
+                         codFin = c(0, 1, 2, 4, NA, NA, NA, NA, NA, NA))
+  datIndi <- apply(datPARED[, c("X15.ST005", "X15.ST007")], MARGIN = 2,
+                   FUN = recodeFun, recode1, recodeNA = NA)
+
+  recode2 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"), 
+                         codFin = c(6, 0, NA, NA, NA, NA))
+  datIndi2 <- apply(datPARED[, c("X15.ST006.A", "X15.ST008.A", "X15.ST006.B", "X15.ST008.B")],
+                    MARGIN = 2, FUN = recodeFun, recode2, recodeNA = NA)
+
+  recode3 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"), 
+                         codFin = c(5, 0, NA, NA, NA, NA))
+  datIndi3 <- apply(datPARED[, c("X15.ST006.C", "X15.ST008.C")], MARGIN = 2,
+                     FUN = recodeFun, recode3, recodeNA = NA)
+
+  datPARED_recod <- data.frame(cbind(datIndi, datIndi2, datIndi3))
+  datPARED_recod[, "HISCED"] <- apply(datPARED_recod, MARGIN = 1,
+                               FUN = max, na.rm = TRUE)
+  
+  colID          <- dataACP[, c("SCHOOL_ID", "STUDENT_ID")]
+  datPARED_recod <- data.frame(colID, datPARED_recod)
+  datPARED_recod <- merge(datPARED_recod, escalaPARED[, c("HISCED", "PARED")])
+
+  PARED       <- datPARED_recod[, c("SCHOOL_ID", "STUDENT_ID", "PARED")]
+  return(PARED)
+}
+
+
+computeHOMEPOS <- function(dataACP, colHOMESPOS = c("X15.ST011", "X15.ST012", "X15.ST013")){
+
+  dataACP    <- data.table(dataACP)
+
+  require(dplyr)
+  dat1    <- select(dataACP, starts_with("X15.ST011"))
+  recode1 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"), 
+                         codFin = c(1, 0, NA, NA, NA, NA))
+  datIndi1 <- apply(dat1, MARGIN = 2,
+                   FUN = recodeFun, recode1, recodeNA = NA)
+
+  dat2 <- select(dataACP, starts_with("X15.ST012"))
+  recode2 <- tibble(codOri = c(1:4, 7, 8, 9, "r"), 
+                         codFin = c(0, 1, 2, 3, NA, NA, NA, NA))
+  datIndi2 <- apply(dat2, MARGIN = 2,
+                   FUN = recodeFun, recode2, recodeNA = NA)
+
+  dat3 <- select(dataACP, starts_with("X15.ST013"))
+  recode3 <- tibble(codOri = c(1:6, 7, 8, 9, "r"), 
+                         codFin = c(0:5, NA, NA, NA, NA))
+  datIndi3 <- apply(dat3, MARGIN = 2,
+                   FUN = recodeFun, recode3, recodeNA = NA)
+
+  datHOMEPOS <- cbind(datIndi1, datIndi2, datIndi3)
+  
+  #Fix difficulty parameters
+  anchorValues <- xlsx::read.xlsx("C:/JEISON/P4S/INDICES/input/PBTS_InternationalParameters.xlsx",
+                                  sheetName = "dif_HOMEPOS", stringsAsFactors = FALSE,
+                                   encoding = "UTF-8")
+  
+  #Fix discrimination parameters
+  B.fixed <- as.matrix(xlsx::read.xlsx("C:/JEISON/P4S/INDICES/input/PBTS_InternationalParameters.xlsx",
+                                  sheetName = "discrim_HOMEPOS", stringsAsFactors = FALSE,
+                                   encoding = "UTF-8"))
+
+  # GPCM Model
+  model <- tam.mml.2pl(resp = datHOMEPOS, xsi.fixed = anchorValues,
+                B.fixed = B.fixed, irtmodel = "GPCM")
+  
+  HOMEPOSwle <- tam.wle(model)
+  colID      <- dataACP[, c("SCHOOL_ID", "STUDENT_ID")]
+
+  HOMEPOS        <- cbind(colID, HOMEPOSwle$theta)
+  names(HOMEPOS) <-  c("SCHOOL_ID", "STUDENT_ID", "HOMEPOS")
+
+  return(HOMEPOS)
+}
+
+computeECSC <- function(bdTAM, colECSC = c("HISEI", "PARED", "HOMEPOS")){
+
+  colID   <- bdTAM[, c("SCHOOL_ID", "STUDENT_ID")]
+  datECSC <- bdTAM[, colECSC] # items para construir el índice
+
+  # AQUI LA REGRESIÓN PARA IMPUTAR !!
+
+  HISEI_  <- (bdTAM[, "HISEI"] - 51.5) / 21.98
+  PARED_  <- (bdTAM[, "PARED"] - 13.85) / 3.08
+
+  ESCS    <- (0.81*HISEI_ + 0.78*PARED_ + 0.80*bdTAM[, "HOMEPOS"])/1.915 
+  ESCS    <- cbind(colID, ESCS)
+
+  return(ESCS)
+}
+                         
