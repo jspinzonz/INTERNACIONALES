@@ -176,9 +176,22 @@ for (ii in 1:nrow(escalaWLE)){
 # # Construcción de agregados
 ################################################################################
 # # Variable Repitente
-isNOREP  <- filACP[, "X15.ST127.A"] == "1" & filACP[, "X15.ST127.B"] == "1" &
-            filACP[, "X15.ST127.C"] == "1" 
-filACP[, "REPETIDORES"] <- ifelse(isNOREP, 0, 1)
+
+filACP <- filACP %>% mutate(X15.ST127.A.2 = ifelse(X15.ST127.A %in% c(7, 9), NA, X15.ST127.A)) %>% 
+ 			mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 == 1, 0, X15.ST127.A.2)) %>%
+  			mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 %in% c(2, 3), 1, X15.ST127.A.2))
+
+filACP <- filACP %>% mutate(X15.ST127.B.2 = ifelse(X15.ST127.B %in% c(7, 9), NA, X15.ST127.B)) %>% 
+ 			mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 == 1, 0, X15.ST127.B.2)) %>%
+  			mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 %in% c(2, 3), 1, X15.ST127.B.2))
+
+filACP <- filACP %>% mutate(X15.ST127.C.2 = ifelse(X15.ST127.C %in% c(7, 9), NA, X15.ST127.C)) %>% 
+ 			mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 == 1, 0, X15.ST127.C.2)) %>%
+  			mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 %in% c(2, 3), 1, X15.ST127.C.2))
+
+filACP[,"suma.127.ABC"] <- rowSums(filACP[168:170], na.rm = TRUE)
+filACP <- filACP %>% mutate(Repitentes = ifelse(suma.127.ABC >= 1, 1, 0))
+
 
 # # Filtrar variables
 varsAux <- lapply(armaAgr[, "auxAgre"], function(x) strsplit(x, "-")[[1]])
