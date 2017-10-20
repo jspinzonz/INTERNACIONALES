@@ -159,8 +159,9 @@ names(listDatNiv)[3:5] <- paste0("NIV_", names(listDatNiv)[3:5])
 interIndic <- xlsx::read.xlsx(fileParam, sheetName = "Indices", 
                               stringsAsFactors = FALSE, encoding = "UTF-8")
 escalaWLE <- xlsx::read.xlsx(fileParam, sheetName = "WLE", 
-                              stringsAsFactors = FALSE, encoding = "UTF-8")
-# # Calculando indices
+                              stringsAsFactors = FALSE, encoding = "UTF-8"
+
+## Calculando indices de escala
 datIndice <- filACP[, c("SCHOOL_ID", "STUDENT_ID")]
 for (ii in 1:nrow(escalaWLE)){
   auxIndex  <- escalaWLE[ii, "Indice"]
@@ -171,7 +172,21 @@ for (ii in 1:nrow(escalaWLE)){
   }
 }
 
+## Calculando indices complejos 		    
+escalaPARED <- xlsx::read.xlsx("C:/JEISON/P4S/INDICES/input/PBTS_InternationalParameters.xlsx",
+                              sheetName = "PARED", stringsAsFactors = FALSE,
+                              encoding = "UTF-8")
 
+dataPARED <- computePARED(filACP)
+bdTAM     <- merge(bdTAM, dataPARED, by = colID)
+
+dataHOMEPOS <- computeHOMEPOS(filACP)
+bdTAM       <- merge(bdTAM, dataHOMEPOS, by = colID)
+
+dataECSC <- computeECSC(filACP)
+bdTAM    <- merge(bdTAM, dataECSC, by = colID)
+
+		     
 ################################################################################
 # # Construcción de agregados
 ################################################################################
