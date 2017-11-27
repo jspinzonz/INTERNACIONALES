@@ -355,7 +355,7 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
   return(pbaResult)
 }
 
-calificaIndice <- function(filACP, nomIndic = "MATHEFF",
+  calificaIndice <- function(filACP, nomIndic = "MATHEFF",
                            anchorValues) {
   # Base con los resultados del cuestionario de estudiante
   filACP    <- data.frame(filACP)
@@ -371,40 +371,65 @@ calificaIndice <- function(filACP, nomIndic = "MATHEFF",
   }
   colsItems <- unique(substr(itemIndic[, "item"], 1, 8))
   # Filtrando parametros de cambio de escala
-  escalaWLE <- filter(escalaWLE, Indice == nomIndic)
+  escalaWLE_Ind <- filter(escalaWLE, Indice == nomIndic)
   datIndi   <- select(filACP, matches(colsItems)) # items para construir el índice
   
   # Dirección de medición de los ítems
   direc <- unique(itemIndic[, "dirección"]) 
   
-  # Cantidad de categorías de respuesta de los ítems del índice
-  # para realizar la recodificación 
-  categ <- max(as.numeric(gsub(".+Cat(\\d)", "\\1",
-                               itemIndic[, "item"])))
-  
+  # Todos los ítems de los índices tienen 4 categorías
+
   cat("----> Recodificando ítems de forma", direc, ":D \n")
   # Recodificacion 
   if(direc == "INVERSA"){
-    # TENER MUY EN CUENTA QUE LA RECODIFICACIÓN DEPENDE DE 
-    # LA CANTIDAD DE CATEGORÍAS DE RESPUESTA DE LOS ÍTEMS 
-    # DEL ÍNDICE
-    
+
     recode_inv <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"), 
-                         codFin = c(categ:0, NA, NA, NA, NA, NA, NA))
+                         codFin = c(3:0, NA, NA, NA, NA, NA, NA))
     
     datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, recode_inv, recodeNA = NA)
   }
   
   if(direc == "DIRECTA"){
-    # TENER MUY EN CUENTA QUE LA RECODIFICACIÓN DEPENDE DE 
-    # LA CANTIDAD DE CATEGORÍAS DE RESPUESTA DE LOS ÍTEMS 
-    # DEL ÍNDICE
     
     recode_dir <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"), 
-                         codFin = c(0:categ, NA, NA, NA, NA, NA, NA))
+                         codFin = c(0:3, NA, NA, NA, NA, NA, NA))
     
     datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, recode_inv, recodeNA = NA)
   }
+  
+  # # Comprobando el numero de respuetas validas
+  isValid <- rowSums(!is.na(datIndi)) >= 3
+  anchorValues <- itemIndic[, "xsi.TAM"]
+  anchorValues <- cbind(1:(length(anchorValues)) , anchorValues)
+
+  if(nomIndic == "DISCLICI") {
+
+  B.fixed    <- as.matrix(xlsx::read.xlsx(fileParam, sheetName = "discrim_DISCLICI",
+                      stringsAsFactors = FALSE, encoding = "UTF-8", header = FALSE))
+
+  Indi_model <- tam.mml.2pl(resp = datIndi[isValid, ]  , xsi.fixed = anchorValues,
+                             B.fixed = B.fixed, irtmodel = "GPCM")
+  Indi_wle   <- tam.mml.wle2(Indi_model)
+  valIndex   <- (Indi_wle$theta - escalaWLE_Ind[, "Mean"])/escalaWLE_Ind[, "SD"]
+  colID      <- filACP[isValid, c("SCHOOL_ID", "STUDENT_ID")]
+  valIndex   <- data.frame(colID, valIndex)
+  setnames(valIndex, 'valIndex', nomIndic)
+  
+  } else {
+
+  # IRT model
+  Indi_model <- tam(datIndi[isValid, ], xsi.fixed = anchorValues)
+  Indi_wle   <- tam.wle(Indi_model)
+  valIndex   <- (Indi_wle$theta - escalaWLE_Ind[, "Mean"])/escalaWLE_Ind[, "SD"]
+  colID      <- filACP[isValid, c("SCHOOL_ID", "STUDENT_ID")]
+  valIndex   <- data.frame(colID, valIndex)
+  setnames(valIndex, 'valIndex', nomIndic)
+
+  }
+  return(valIndex)
+  # write.table(EndResults,file="MATHEFF_12Actvity.csv",sep = ",",dec=".",row.names = FALSE, col.names = TRUE)
+} 
+
   
   # # Comprobando el numero de respuetas validas
   isValid <- rowSums(!is.na(datIndi)) >= 3
