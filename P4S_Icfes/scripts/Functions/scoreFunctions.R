@@ -31,6 +31,26 @@ VAR_P4S <- function(x, muReal = x[81]){
   return(sum((x[-81] - muReal) ^ 2) / 20)
 }
 
+calRepitente <- function(filACP) {
+
+  filACP <- filACP %>% mutate(X15.ST127.A.2 = ifelse(X15.ST127.A %in% c(7, 9), NA, X15.ST127.A)) %>% 
+        mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 == 1, 0, X15.ST127.A.2)) %>%
+          mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 %in% c(2, 3), 1, X15.ST127.A.2))
+
+  filACP <- filACP %>% mutate(X15.ST127.B.2 = ifelse(X15.ST127.B %in% c(7, 9), NA, X15.ST127.B)) %>% 
+        mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 == 1, 0, X15.ST127.B.2)) %>%
+          mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 %in% c(2, 3), 1, X15.ST127.B.2))
+
+  filACP <- filACP %>% mutate(X15.ST127.C.2 = ifelse(X15.ST127.C %in% c(7, 9), NA, X15.ST127.C)) %>% 
+        mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 == 1, 0, X15.ST127.C.2)) %>%
+          mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 %in% c(2, 3), 1, X15.ST127.C.2))
+
+  filACP[,"suma.127.ABC"] <- rowSums(filACP[, c("X15.ST127.A.2", "X15.ST127.B.2", 
+                                                "X15.ST127.C.2")], na.rm = TRUE)
+  filACP <- filACP %>% mutate(Repitentes = ifelse(suma.127.ABC >= 1, 1, 0))
+  return(filACP)
+}
+
 computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
                        funAgre = "Promedio", byVars = c("SCHOOL_ID"), 
                        byTests = c("LECTURA", "CIENCIAS", "MATEMATICAS")) {
@@ -355,7 +375,7 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
   return(pbaResult)
 }
 
-  calificaIndice <- function(filACP, nomIndic = "MATHEFF",
+calificaIndice <- function(filACP, nomIndic = "MATHEFF",
                            anchorValues) {
   # Base con los resultados del cuestionario de estudiante
   filACP    <- data.frame(filACP)
@@ -375,26 +395,24 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
   datIndi   <- select(filACP, matches(colsItems)) # items para construir el índice
   
   # Dirección de medición de los ítems
-  direc <- unique(itemIndic[, "dirección"]) 
+  direc <- unique(itemIndic[, "direccion"]) 
   
   # Todos los ítems de los índices tienen 4 categorías
 
   cat("----> Recodificando ítems de forma", direc, ":D \n")
   # Recodificacion 
   if(direc == "INVERSA"){
-
     recode_inv <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"), 
-                         codFin = c(3:0, NA, NA, NA, NA, NA, NA))
-    
-    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, recode_inv, recodeNA = NA)
+                         codFin = c(3:0, NA, NA, NA, NA, NA, NA))    
+    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, 
+                     recode_inv, recodeNA = NA)
   }
   
   if(direc == "DIRECTA"){
-    
     recode_dir <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"), 
                          codFin = c(0:3, NA, NA, NA, NA, NA, NA))
-    
-    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, recode_inv, recodeNA = NA)
+    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, 
+                     recode_dir, recodeNA = NA)
   }
   
   # # Comprobando el numero de respuetas validas
@@ -403,7 +421,6 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
   anchorValues <- cbind(1:(length(anchorValues)) , anchorValues)
 
   if(nomIndic == "DISCLICI") {
-
   B.fixed    <- as.matrix(xlsx::read.xlsx(fileParam, sheetName = "discrim_DISCLICI",
                       stringsAsFactors = FALSE, encoding = "UTF-8", header = FALSE))
 
@@ -427,26 +444,9 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
 
   }
   return(valIndex)
-  # write.table(EndResults,file="MATHEFF_12Actvity.csv",sep = ",",dec=".",row.names = FALSE, col.names = TRUE)
 } 
 
-  
-  # # Comprobando el numero de respuetas validas
-  isValid <- rowSums(!is.na(datIndi)) >= 3
-  anchorValues <- itemIndic[, "xsi.TAM"]
-  anchorValues <- cbind(1:(length(anchorValues)) , anchorValues)
-  
-  # IRT model
-  Indi_model <- tam(datIndi[isValid, ], xsi.fixed = anchorValues)
-  Indi_wle   <- tam.wle(Indi_model)
-  valIndex   <- (Indi_wle$theta - escalaWLE[, "Mean"])/escalaWLE[, "SD"]
-  colID      <- filACP[isValid, c("SCHOOL_ID", "STUDENT_ID")]
-  valIndex   <- data.frame(colID, valIndex)
-  setnames(valIndex, 'valIndex', nomIndic)
-  return(valIndex)
-  # write.table(EndResults,file="MATHEFF_12Actvity.csv",sep = ",",dec=".",row.names = FALSE, col.names = TRUE)
-} 
-
+ 
 multilevelPISA <- function(dat, pv, lvl, fixed, wgt){
   # Extrae registros con valores faltantes
   naCodes <- c("", "M", "N", "I")
@@ -600,12 +600,12 @@ computeHOMEPOS <- function(dataACP, colHOMESPOS = c("X15.ST011", "X15.ST012", "X
   datHOMEPOS <- cbind(datIndi1, datIndi2, datIndi3)
   
   #Fix difficulty parameters
-  anchorValues <- xlsx::read.xlsx("C:/JEISON/P4S/INDICES/input/PBTS_InternationalParameters.xlsx",
+  anchorValues <- xlsx::read.xlsx("../input/PBTS_InternationalParameters.xlsx",
                                   sheetName = "dif_HOMEPOS", stringsAsFactors = FALSE,
                                    encoding = "UTF-8")
   
   #Fix discrimination parameters
-  B.fixed <- as.matrix(xlsx::read.xlsx("C:/JEISON/P4S/INDICES/input/PBTS_InternationalParameters.xlsx",
+  B.fixed <- as.matrix(xlsx::read.xlsx("../input/PBTS_InternationalParameters.xlsx",
                                   sheetName = "discrim_HOMEPOS", stringsAsFactors = FALSE,
                                    encoding = "UTF-8"))
 

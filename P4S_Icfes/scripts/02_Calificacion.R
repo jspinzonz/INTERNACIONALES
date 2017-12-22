@@ -82,6 +82,22 @@ if (any(is.na(bdTAM[, "HISEI"]))) {
 	stop("ERROR..... Existen STUDENT_ID sin HISEI")
 }
 
+# # Perfiles Lectores
+intVar <- names(filACP)[names(filACP) %like% "ST25|ST41|ST42"]
+filACP  <- as.data.table(filACP)
+datReadPr <- filACP[, .SD, .SDcols = c(colID, intVar)]
+datBuild <- readerProfiles(datReadPr, outPath)
+
+# # Lee archivo de salida de MPLUS
+prflsPath <- file.path(inPath, "outputPerfilLector.txt")
+readPrfls <- fread(prflsPath)
+names(readPrfls) <- c("magazin", "comic", "fiction", "nonfic", "news", "undrem",
+                      "metasum", "cprob1", "cprob2", "cprob3", "cprob4", 
+                      "cprob5", "cprob6", "c1", "c2", "PERFILLECTOR")
+
+readPrfls <- cbind(datBuild[, list(SCHOOL_ID, STUDENT_ID)], readPrfls)
+setkey(readPrfls, SCHOOL_ID, STUDENT_ID)
+
 # # Lectura de N por establecimiento
 fileNR <- file.path(inPath, "Conteos_Establecimiento.csv")
 nReal  <- data.table(read.table(fileNR, header = T, sep = "\t", dec = ","))
@@ -150,16 +166,18 @@ listDatNiv <- dcast.data.table(rbindlist(listDatNiv, idcol = "PRUEBA"),
                             value.var = "LevelP4S")
 names(listDatNiv)[3:5] <- paste0("NIV_", names(listDatNiv)[3:5])
 
-
+# # Asignar All rounders
+isAll <- rowSums(sapply(listDatNiv %>% select(starts_with("NIV")), function(x) x %in% c("5", "6"))) == 3
+isNo  <- rowSums(sapply(listDatNiv %>% select(starts_with("NIV")), function(x) x %in% c("1b", "1a"))) == 3
+listDatNiv[, "TODOTERRENO"] <- ifelse(isAll, "TODOTERRENO", ifelse(isNo, "ENRIESGO", "NORMAL"))
 ################################################################################
 # # Construcción de Indices
 ################################################################################
-
 # # Lectura de calibraciones del indice
 interIndic <- xlsx::read.xlsx(fileParam, sheetName = "Indices", 
                               stringsAsFactors = FALSE, encoding = "UTF-8")
-escalaWLE <- xlsx::read.xlsx(fileParam, sheetName = "WLE", 
-                              stringsAsFactors = FALSE, encoding = "UTF-8"
+escalaWLE  <- xlsx::read.xlsx(fileParam, sheetName = "WLE", 
+                              stringsAsFactors = FALSE, encoding = "UTF-8")
 
 ## Calculando indices de escala
 datIndice <- filACP[, c("SCHOOL_ID", "STUDENT_ID")]
@@ -173,7 +191,7 @@ for (ii in 1:nrow(escalaWLE)){
 }
 
 ## Calculando indices complejos 		    
-escalaPARED <- xlsx::read.xlsx("C:/JEISON/P4S/INDICES/input/PBTS_InternationalParameters.xlsx",
+escalaPARED <- xlsx::read.xlsx("../input/PBTS_InternationalParameters.xlsx",
                               sheetName = "PARED", stringsAsFactors = FALSE,
                               encoding = "UTF-8")
 
@@ -183,30 +201,14 @@ bdTAM     <- merge(bdTAM, dataPARED, by = colID)
 dataHOMEPOS <- computeHOMEPOS(filACP)
 bdTAM       <- merge(bdTAM, dataHOMEPOS, by = colID)
 
-dataECSC <- computeECSC(filACP)
-bdTAM    <- merge(bdTAM, dataECSC, by = colID)
+dataECSC  <- computeECSC(bdTAM)
+filACP    <- merge(filACP, dataECSC, by = colID)
 
-		     
 ################################################################################
 # # Construcción de agregados
 ################################################################################
-# # Variable Repitente
-
-filACP <- filACP %>% mutate(X15.ST127.A.2 = ifelse(X15.ST127.A %in% c(7, 9), NA, X15.ST127.A)) %>% 
- 			mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 == 1, 0, X15.ST127.A.2)) %>%
-  			mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 %in% c(2, 3), 1, X15.ST127.A.2))
-
-filACP <- filACP %>% mutate(X15.ST127.B.2 = ifelse(X15.ST127.B %in% c(7, 9), NA, X15.ST127.B)) %>% 
- 			mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 == 1, 0, X15.ST127.B.2)) %>%
-  			mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 %in% c(2, 3), 1, X15.ST127.B.2))
-
-filACP <- filACP %>% mutate(X15.ST127.C.2 = ifelse(X15.ST127.C %in% c(7, 9), NA, X15.ST127.C)) %>% 
- 			mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 == 1, 0, X15.ST127.C.2)) %>%
-  			mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 %in% c(2, 3), 1, X15.ST127.C.2))
-
-filACP[,"suma.127.ABC"] <- rowSums(filACP[168:170], na.rm = TRUE)
-filACP <- filACP %>% mutate(Repitentes = ifelse(suma.127.ABC >= 1, 1, 0))
-
+# # Calculo de indicadora de repitacia 
+filACP <- calRepitente(filACP)
 
 # # Filtrar variables
 varsAux <- lapply(armaAgr[, "auxAgre"], function(x) strsplit(x, "-")[[1]])
@@ -216,32 +218,20 @@ varsAux <- subset(filACP, select = c("STUDENT_ID", intersect(varsAux,
 infoIndice <- merge(varsAux, dplyr::select(bdTAM, SCHOOL_ID:edadM), by = colID)
 
 # # asignacion de percentil y decil de los estudiantes por colegio
-cuarDecil<- cuarDec(resultPFS, wrFay)
+cuarDecil <- cuarDec(resultPFS, wrFay)
 
 # # Lectura de niveles de agregación
 infoIndice <- cbind(infoIndice,
-                    ESCS = round(rnorm(676, 48, 11)),
-                    # PERFILLECTOR =  round(runif(676, 1, 4)),
                     PERCENTIL_PAIS = sample(c("P10", "P25", "P75", "P90"), 676, replace = TRUE),
                     SECTOR = sample(c("OFICIAL", "URBANO", "NO OFICIAL", "RURAL"), 676, replace = TRUE))
 infoIndice <- merge(merge(infoIndice, listDatNiv, by = colID), 
                                        cuarDecil, by = colID)
-
-# # Perfiles Lectores
-intVar <- names(filACP)[names(filACP) %like% "ST25|ST41|ST42"]
-datReadPr <- filACP[, .SD, .SDcols = c(colID, intVar)]
-datBuild <- readerProfiles(datReadPr, outPath)
-# # Lee archivo de salida de MPLUS
-prflsPath <- file.path(inPath, "outputPerfilLector.txt")
-readPrfls <- fread(prflsPath)
-names(readPrfls) <- c("magazin", "comic", "fiction", "nonfic", "news", "undrem",
-                      "metasum", "cprob1", "cprob2", "cprob3", "cprob4", 
-                      "cprob5", "cprob6", "c1", "c2", "PERFILLECTOR")
-
-readPrfls <- cbind(datBuild[, list(SCHOOL_ID, STUDENT_ID)], readPrfls)
-setkey(readPrfls, SCHOOL_ID, STUDENT_ID)
-
+# # Agregando perfiles lectores
 infoIndice <- merge(infoIndice, readPrfls[, list(SCHOOL_ID, STUDENT_ID, PERFILLECTOR)])
+
+# # Agregando promedio de ECCS
+resultPFS[["ESCS"]] <- subset(infoIndice, select = c("SCHOOL_ID", "STUDENT_ID", "ESCS"))
+setnames(resultPFS[["ESCS"]], "ESCS", "PV1_ESCS")
 
 # # Caculo de agregados
 tableResult <- list()
@@ -255,6 +245,14 @@ for (ii in (1:nrow(armaAgr))) {
 
 # # Guardando salida de agregados
 tableResult <- rbindlist(tableResult)
-fileOut     <- file.path(outPath, "Puntajes", "AgregadosP4S_EJEMPLO.txt")
+fileOut     <- file.path(outPath, "Puntajes", "AgregadosP4S_V2.txt")
 write.table(tableResult, file = fileOut, 
             quote = FALSE, row.names = FALSE, sep = ";")
+
+# # Guardando info en un solo archivo
+datOut <- merge(resultPFS[["LECTURA"]], merge(resultPFS[["CIENCIAS"]], 
+	            resultPFS[["MATEMATICAS"]], by = colID), by = colID)
+datOut <- merge(datOut, datIndice, by = colID)
+datOut <- merge(datOut, bdTAM, by = colID)
+datOut <- merge(datOut, wrFay, by = colID)
+save(datOut, file = file.path(outPath, "resultPFSALL.Rdata"))
