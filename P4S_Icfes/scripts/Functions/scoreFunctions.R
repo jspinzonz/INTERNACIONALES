@@ -5,7 +5,7 @@
 # # Author(s): Jorge Mario Carrasco Ortiz y Jeison Rodriguez
 # #
 # # Pisa For Schools (P4S)
-# # Calcular IRT 
+# # Calcular IRT
 # #
 # # Inputs: Base de datos depurada del proceso 00_depuracion
 # #
@@ -19,7 +19,25 @@
 ################################################################################
 options(encoding = "UTF-8")
 
-rowVars <- function (x, na.rm = TRUE) 
+calRepitente <- function(filACP){
+  # # Variable Repitente
+  filACP <- filACP %>% mutate(X15.ST127.A.2 = ifelse(X15.ST127.A %in% c(7, 9), NA, X15.ST127.A)) %>%
+        mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 == 1, 0, X15.ST127.A.2)) %>%
+          mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 %in% c(2, 3), 1, X15.ST127.A.2))
+
+  filACP <- filACP %>% mutate(X15.ST127.B.2 = ifelse(X15.ST127.B %in% c(7, 9), NA, X15.ST127.B)) %>%
+        mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 == 1, 0, X15.ST127.B.2)) %>%
+          mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 %in% c(2, 3), 1, X15.ST127.B.2))
+
+ # filACP <- filACP %>% mutate(X15.ST127.C.2 = ifelse(X15.ST127.C %in% c(7, 9), NA, X15.ST127.C)) %>%
+ #       mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 == 1, 0, X15.ST127.C.2)) %>%
+ #         mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 %in% c(2, 3), 1, X15.ST127.C.2))
+  filACP[,"suma.127.ABC"] <- rowSums(filACP[, grep("X15\\.ST127\\.(A|B|C)\\.2", names(filACP))], na.rm = TRUE)
+  filACP <- filACP %>% mutate(REPETIDORES = ifelse(suma.127.ABC >= 1, 1, 0))
+  return(filACP)
+}
+
+rowVars <- function (x, na.rm = TRUE)
 {
     sqr = function(x) x * x
     n = rowSums(!is.na(x))
@@ -31,30 +49,10 @@ VAR_P4S <- function(x, muReal = x[81]){
   return(sum((x[-81] - muReal) ^ 2) / 20)
 }
 
-calRepitente <- function(filACP) {
-
-  filACP <- filACP %>% mutate(X15.ST127.A.2 = ifelse(X15.ST127.A %in% c(7, 9), NA, X15.ST127.A)) %>% 
-        mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 == 1, 0, X15.ST127.A.2)) %>%
-          mutate(X15.ST127.A.2 = ifelse(X15.ST127.A.2 %in% c(2, 3), 1, X15.ST127.A.2))
-
-  filACP <- filACP %>% mutate(X15.ST127.B.2 = ifelse(X15.ST127.B %in% c(7, 9), NA, X15.ST127.B)) %>% 
-        mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 == 1, 0, X15.ST127.B.2)) %>%
-          mutate(X15.ST127.B.2 = ifelse(X15.ST127.B.2 %in% c(2, 3), 1, X15.ST127.B.2))
-
-  filACP <- filACP %>% mutate(X15.ST127.C.2 = ifelse(X15.ST127.C %in% c(7, 9), NA, X15.ST127.C)) %>% 
-        mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 == 1, 0, X15.ST127.C.2)) %>%
-          mutate(X15.ST127.C.2 = ifelse(X15.ST127.C.2 %in% c(2, 3), 1, X15.ST127.C.2))
-
-  filACP[,"suma.127.ABC"] <- rowSums(filACP[, c("X15.ST127.A.2", "X15.ST127.B.2", 
-                                                "X15.ST127.C.2")], na.rm = TRUE)
-  filACP <- filACP %>% mutate(Repitentes = ifelse(suma.127.ABC >= 1, 1, 0))
-  return(filACP)
-}
-
 computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
-                       funAgre = "Promedio", byVars = c("SCHOOL_ID"), 
+                       funAgre = "Promedio", byVars = c("SCHOOL_ID"),
                        byTests = c("LECTURA", "CIENCIAS", "MATEMATICAS")) {
-  
+
   if (funAgre == "ESCS") {
     return(NULL)
   }
@@ -62,133 +60,150 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
   if (all(byTests != "NULL")){
     resultPFS <- resultPFS[byTests]
   }
+
   idAux <- c("SCHOOL_ID", "STUDENT_ID")
   # # Tabla para estandarizar salidas
-  tipoAgre <- ifelse("SCHOOL_ID" %in% byVars, "COLEGIO", 
-                     ifelse("REGION_ID" %in% byVars, "REGION", "PAIS"))  
+  tipoAgre <- ifelse("SCHOOL_ID" %in% byVars, "COLEGIO",
+                     ifelse("REGION_ID" %in% byVars, "REGION", "PAIS"))
   auxAgre  <- paste(byVars, collapse = "-")
 
   # # Iterando por pruebas
   faltaVars <- byVars[!byVars %in% names(infoStudent)]
   if (length(faltaVars) > 0) {
-    warning("Hay algunas variables que faltan en la base (", 
+    warning("Hay algunas variables que faltan en la base (",
            paste0(faltaVars, collapse = "-"), ")")
     return(NULL)
   }
   infoStudent <- data.table(subset(infoStudent, select = unique(c(idAux, byVars))))
-  resultEst  <- list() 
+  resultEst  <- list()
 
   # # Si se debe calcular un porcentaje
-  regxCols <- ifelse(funAgre %in% c("Promedio", "Promedio/ESCS"), "PV\\d", "data\\.")
+  regxCols <- ifelse(funAgre %in% c("Promedio", "Promedio/ESCS", "Mediana"), "PV\\d", "data\\.")
   varCat   <- byVars[!byVars %in% c("SCHOOL_ID")]
   if (length(varCat) == 0 & funAgre == "Porcentaje"){
     stop("Se debe definir al menos una variable de categorias (Funcion Porcentaje)")
   }
 
   # # Arreglando entrada de datos
+  if( length(varCat)!=0){
   infoStudent[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
-  if (funAgre == "Porcentaje") {
+  }
+  if (funAgre == "Porcentaje") {    
+    # # Eliminar Categorias en NA
+    idStu       <- subset(infoStudent, CATEGORIA != "NA")[,STUDENT_ID]
+    infoStudent <- subset(infoStudent, STUDENT_ID %in% idStu)
+    wrFay       <- subset(wrFay, STUDENT_ID %in% idStu)
+    # #  Dicotomizar la variable
     infoStudent <- cbind(infoStudent, dichotom(infoStudent[, CATEGORIA]))
     resultPFS   <- list('CATEGORIA' = infoStudent[, .(SCHOOL_ID, STUDENT_ID)])
     byVars      <- byVars[!byVars %in% varCat]
+   # infoStudent[,"data.NA"]  <-  NULL
   }
- 
-  if (funAgre != "Mediana") {
-     for (testX in names(resultPFS)) {
-        datTest <- merge(infoStudent, merge(resultPFS[[testX]], wrFay, by = idAux), 
-                         by = idAux)
-        # # Calculo de media por replica y valor plausible
-        namesCols <- grep(regxCols, names(datTest), value = TRUE)
-        auxMultiReg <- function(data, byVars) {
-          infoWei <- data[, .SD, .SDcols = grep("Weight_", names(data))]
-          infoPV  <- data[, .SD, .SDcols = namesCols]
-          fullDat <- cbind(infoPV, infoWei, data[, .SD, .SDcols = byVars])
-          listOut <- list()
-          lapply(names(infoPV), function(itPV){
-            lapply(names(infoWei), function(itWGT){
-              tempDat <- fullDat[, .SD, .SDcols = c(byVars, itPV, itWGT)]
-              modEst <- multilevelPISA(tempDat, itPV, byVars[1], byVars[2], itWGT)
-              datOut <- cbind("PV" = itPV, "Replica" = itWGT, modEst)
-              listOut[[paste(itPV, itWGT, sep = "-")]] <<- datOut
-            })
-          })
-          datTB <- rbindlist(listOut, fill = TRUE)
-          datOut <- dcast.data.table(datTB, Replica + SCHOOL_ID + N ~ PV, value.var = "Intercept")
-          return(datOut)
-        }
-        auxMean <- function(datAux) {
-            nrowAux <- nrow(datAux)
-            infoWei <- datAux[, .SD, .SDcols = grep("Weight_", names(datAux))]
-            infoPV  <- datAux[, .SD, .SDcols = namesCols]
-            mea1Rep <- function(z){
-              unlist(infoWei[, lapply(.SD, function(y) weighted.mean(z, y))][1,])
-            }
-            datAux <- infoPV[, lapply(.SD, mea1Rep)]
-            #datAux <- sapply(infoPV, mea1Rep)
-            cbind('N' = nrowAux, 'Replica' = paste0("Weight_", 1:81), 
-                  data.table(datAux))
-        }
-        # # Calculo del error de estimación
-        listLinkSEE <- list('LECTURA' = 8.132, 
-                            'CIENCIAS' = 11.188, 
-                            'MATEMATICAS' = 10.101)        
-        if (funAgre == "Promedio/ESCS") {
-          datAux <- datTest[, auxMultiReg(.SD, byVars)]
-          initByVar <- byVars
-          byVars <- byVars[1]
-        } else {
-          datAux <- datTest[, auxMean(.SD), by = byVars]
-        }
-        auxEst <- datAux[Replica == "Weight_81", ]
-        auxSEE <- datAux[, lapply(.SD, VAR_P4S), by = byVars, 
-                        .SDcols = namesCols]
-        if (funAgre == "Porcentaje") {
-         auxEst <- melt(auxEst, id = c(byVars, "N", "Replica"), value.name = "ESTIMACION")
-         auxSEE <- melt(auxSEE, id = byVars, value.name = "VAR_sam")
-         auxEst[, VAR_measure := 0]
-         auxSEE[, VAR_link := 0]
-         auxEst[, CATEGORIA := gsub("data\\.", "", variable)]
-         auxSEE[, CATEGORIA := gsub("data\\.", "", variable)]
+  # # 
+  for (testX in names(resultPFS)) {
+    datTest <- merge(infoStudent, merge(resultPFS[[testX]], wrFay, by =
+                                        idAux, all = TRUE),
+                      by = idAux, all = TRUE)
 
-        } 
-        if (funAgre %in% c("Promedio", "Promedio/ESCS")) {
-          auxEst[, ESTIMACION := rowMeans(select(auxEst, starts_with("PV")))]
-          auxEst[, VAR_measure := rowVars(select(auxEst, starts_with("PV")))]
-          auxSEE[, VAR_sam := rowMeans(select(auxSEE, starts_with("PV")))]
-          auxSEE[, VAR_link := listLinkSEE[[testX]]]
-          if (length(varCat) > 0 & funAgre != "Promedio/ESCS"){
-            auxEst[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
-            auxSEE[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
+    #datTest <- merge(infoStudent, merge(resultPFS[[testX]], wrFay, by =
+    #                                    idAux),
+    #                  by = idAux)
+    # # Calculo de media por replica y valor plausible
+    namesCols <- grep(regxCols, names(datTest), value = TRUE)
+    auxMultiReg <- function(data, byVars) {
+      infoWei <- data[, .SD, .SDcols = grep("Weight_", names(data))]
+      infoPV  <- data[, .SD, .SDcols = namesCols]
+      fullDat <- cbind(infoPV, infoWei, data[, .SD, .SDcols = byVars])
+      listOut <- list()
+      meanFixed <- weighted.mean(fullDat[[byVars[2]]], fullDat[["Weight_81"]], na.rm = TRUE)
+      fullDat[ ,"fixed" := fullDat[[byVars[2]]] - meanFixed]
+      lapply(names(infoPV), function(itPV){
+        lapply(names(infoWei), function(itWGT){
+          tempDat <- fullDat[, .SD, .SDcols = c(byVars, "fixed", itPV, itWGT)]
+          modEst <- multilevelPISA(tempDat, itPV, byVars[1], "fixed", itWGT)
+          datOut <- cbind("PV" = itPV, "Replica" = itWGT, modEst)
+          listOut[[paste(itPV, itWGT, sep = "-")]] <<- datOut
+        })
+      })
+      datTB <- rbindlist(listOut, fill = TRUE)
+      datOut <- dcast.data.table(datTB, Replica + SCHOOL_ID + N ~ PV, value.var = "Intercept")
+      return(datOut)
+    }
+    auxMean <- function(datAux, flagMedian = FALSE) {
+        nrowAux <- nrow(datAux)
+        infoWei <- datAux[, .SD, .SDcols = grep("Weight_", names(datAux))]
+        infoPV  <- datAux[, .SD, .SDcols = namesCols]
+        mea1Rep <- function(z){
+          if (!flagMedian){
+            unlist(infoWei[, lapply(.SD, function(y) weighted.mean(z, y, na.rm = TRUE))][1,])
           } else {
-            auxEst[, CATEGORIA := "NULL"]
-            auxSEE[, CATEGORIA := "NULL"]
+            unlist(infoWei[, lapply(.SD, function(y) wtd.quantile(z, weights = y, probs = 0.5, na.rm = TRUE))][1,])
           }
         }
-        # # Arreglando salida
-        testCol <- ifelse(funAgre %in% c("Promedio", "Promedio/ESCS"), testX, "NULL")
-        if (length(byTests) == 1)
-          testCol <- byTests
-        auxEst  <- auxEst[, cbind('TIPO_AGREGADO' = tipoAgre, 'COD_AGREGADO' = codAgre, 
-                                  'PRUEBA' = testCol, .SD), 
-                          .SDcols = c(byVars, "CATEGORIA", "N", "ESTIMACION", "VAR_measure")]
-        resultEst[[testX]] <- merge(auxEst, auxSEE, by = c(byVars, "CATEGORIA"))
-        if (verbose)
-           cat("...... Termino agregado (", auxAgre, ") para --", testX, "--\n")
-        if(funAgre == "Promedio/ESCS"){
-          byVars <- initByVar
-        }
-     }
-  } else {
-    resultEst <- lapply(names(resultPFS), function(x) {
-                         auxDat <- merge(infoStudent, resultPFS[[x]], by = idAux)
-                         resultPFS[[x]][, .('TIPO_AGREGADO' = tipoAgre, 
-                                            'COD_AGREGADO' = codAgre,
-                                            'PRUEBA' = x, 'N' = .N, 
-                                            'ESTIMACION' = median(PV_Mean)
-                                            ), by = byVars]})
-    resultEst <- lapply(resultEst, function(x) 
-                        cbind(x, VAR_measure = 0, VAR_sam = 0,
-                        VAR_link = 0))
+        datAux <- infoPV[, lapply(.SD, mea1Rep)]
+        #datAux <- sapply(infoPV, mea1Rep)
+        cbind('N' = nrowAux, 'Replica' = paste0("Weight_", 1:81),
+              data.table(datAux))
+    }
+
+    # # Calculo del agregado usando auxMultiReg o auxMean
+    listLinkSEE <- list('LECTURA' = 8.132,
+                        'CIENCIAS' = 11.188,
+                        'MATEMATICAS' = 10.101,
+                        'ESCS' = 0)
+    if (funAgre == "Promedio/ESCS") {
+      datAux <- datTest[, auxMultiReg(.SD, byVars)]
+      initByVar <- byVars
+      byVars <- byVars[1]
+    } else {
+      datAux <- datTest[, auxMean(.SD, flagMedian = funAgre == "Mediana"),
+                        by = byVars]
+    }
+    auxEst <- datAux[Replica == "Weight_81", ]
+    auxSEE <- datAux[, lapply(.SD, VAR_P4S), by = byVars,
+                    .SDcols = namesCols]
+    if (funAgre == "Porcentaje") {
+      auxEst <- melt(auxEst, id = c(byVars, "N", "Replica"), value.name = "ESTIMACION")
+      auxSEE <- melt(auxSEE, id = byVars, value.name = "VAR_sam")
+      auxEst[, VAR_measure := 0]
+      auxSEE[, VAR_link := 0]
+      auxEst[, CATEGORIA := gsub("data\\.", "", variable)]
+      auxSEE[, CATEGORIA := gsub("data\\.", "", variable)]
+    }
+    # # Calculo del error de estimación de muestreo, de medida y de linking
+    if (funAgre %in% c("Promedio", "Promedio/ESCS", "Mediana")) {
+      auxEst[, ESTIMACION := rowMeans(select(auxEst, starts_with("PV")))]
+      if (testX != "ESCS"){
+        auxEst[, VAR_measure := rowVars(select(auxEst, starts_with("PV")))]
+      } else {
+        auxEst[, VAR_measure := 0]
+      }
+      linkAux <- listLinkSEE[[testX]]
+      auxSEE[, VAR_sam  := rowMeans(select(auxSEE, starts_with("PV")))]
+      auxSEE[, VAR_link := ifelse(is.null(linkAux), 0, linkAux)]
+      if (length(varCat) > 0 & funAgre != "Promedio/ESCS"){
+        auxEst[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
+        auxSEE[, CATEGORIA := do.call(paste, c(.SD, list(sep = "-"))), .SDcols = varCat]
+      } else {
+        auxEst[, CATEGORIA := "NULL"]
+        auxSEE[, CATEGORIA := "NULL"]
+      }
+    }
+
+    # # Arreglando salida
+    testCol <- ifelse(funAgre %in% c("Promedio", "Promedio/ESCS", "Mediana"), testX, "NULL")
+    if (length(byTests) == 1)
+      testCol <- byTests
+    auxEst  <- auxEst[, cbind('TIPO_AGREGADO' = tipoAgre, 'COD_AGREGADO' = codAgre,
+                              'PRUEBA' = testCol, .SD),
+                      .SDcols = c(byVars, "CATEGORIA", "N", "ESTIMACION", "VAR_measure")]
+    resultEst[[testX]] <- merge(auxEst, auxSEE, by = c(byVars, "CATEGORIA"))
+    if(verbose){
+        cat("...... Termino agregado (", auxAgre, ") para --", testX, "--\n")
+    }
+    if(funAgre == "Promedio/ESCS"){
+      byVars <- initByVar
+    }
   }
   resultEst <- rbindlist(resultEst)
 
@@ -197,20 +212,22 @@ computeEst <- function(resultPFS, wrFay, infoStudent, codAgre, verbose = TRUE,
   resultEst[, SSE_NLIN := sqrt(1.2 * VAR_measure + VAR_sam)]
   colFix <- c("SCHOOL_ID", "CATEGORIA", "SSE_NLIN", "SSE_LIN")
   colFix <- colFix[!colFix %in% names(resultEst)]
-  if (length(colFix) > 0){ 
-    resultEst[, (colFix) := "NULL"] 
+  if (length(colFix) > 0){
+    resultEst[, (colFix) := "NULL"]
   }
-  resultEst <- resultEst[, .(TIPO_AGREGADO, COD_AGREGADO, CATEGORIA, 
-                             SCHOOL_ID, PRUEBA, N, ESTIMACION, SSE_NLIN, 
+  resultEst <- resultEst[, .(TIPO_AGREGADO, COD_AGREGADO, CATEGORIA,
+                             SCHOOL_ID, PRUEBA, N, ESTIMACION, SSE_NLIN,
                              SSE_LIN)]
+
+#####$
   return(resultEst)
 }
 
-recodeFun <- function(z, recodeTbl, flagVerbose = FALSE, recodeNA = "99"){ 
+recodeFun <- function(z, recodeTbl, flagVerbose = FALSE, recodeNA = "99"){
   auxHISEI <- unname(setNames(recodeTbl$codFin, recodeTbl$codOri)[as.character(z)])
   if (any(is.na(auxHISEI)) & flagVerbose) {
     print("Existen codigos sin recodificacion")
-    print(unique(z[is.na(auxHISEI)]))  
+    print(unique(z[is.na(auxHISEI)]))
   }
   auxHISEI[is.na(auxHISEI)] <- recodeNA
   return(auxHISEI)
@@ -221,15 +238,15 @@ computeHISEI <- function(dataACP, colHISEI, codeHISEI) {
   datHISEI  <- dataACP[, colHISEI, with = FALSE]
   # # Lectura de codigos(recodificacion)
   spsHISEI  <- readLines(codeHISEI, encoding = "UTF-8", warn = FALSE)
-  codeHISEI <- unique(grep("^\\(\\d+=\\d+\\)$", spsHISEI, value = TRUE)) 
+  codeHISEI <- unique(grep("^\\(\\d+=\\d+\\)$", spsHISEI, value = TRUE))
 
   # # recodificacion y calculo HISEI
-  recodeTbl <- tibble(codOri = gsub("\\((\\d+)=(.+)\\)$", "\\1", codeHISEI), 
+  recodeTbl <- tibble(codOri = gsub("\\((\\d+)=(.+)\\)$", "\\1", codeHISEI),
                       codFin = gsub("\\((\\d+)=(.+)\\)$", "\\2", codeHISEI))
   datHISEI <- datHISEI[, lapply(.SD, recodeFun, recodeTbl, flagVerbose = TRUE)]
   datHISEI <- datHISEI[, lapply(.SD, as.numeric)]
   datHISEI[, HISEI := do.call(pmax,.SD)]
-  datHISEI <- cbind(dataACP[, .(SCHOOL_ID, STUDENT_ID)], 
+  datHISEI <- cbind(dataACP[, .(SCHOOL_ID, STUDENT_ID)],
                     datHISEI)
   return(datHISEI)
 }
@@ -237,31 +254,33 @@ computeHISEI <- function(dataACP, colHISEI, codeHISEI) {
 
 pcaStudent <- function(dataACP, colID) {
   dataACP <- data.table(dataACP)
-  #princomp(#as.formula(paste("~", paste(colPCA, collapse = " + "))), 
+  #princomp(#as.formula(paste("~", paste(colPCA, collapse = " + "))),
   #prcomp(dataACP[, colPCA, with = FALSE], scale = TRUE)
   #corPCA   <- cor(dataACP[, colPCA, with = FALSE], use = "pairwise.complete.obs")
 
   # # Recodificacion
-  specCase  <- c("X09.ST06", "X15.ST022")
+  #specCase  <- c("X09.ST06", "X15.ST022")
+  specCase  <- c("X09.ST06")
   colPCA    <- names(dataACP)[!names(dataACP) %in% colID]
-  recodeTbl <- tibble(codOri = c(1:6, 7, 8, 9, "r"), 
+  recodeTbl <- tibble(codOri = c(1:6, 7, 8, 9, "r"),
                       codFin = c(1:6, NA, NA, NA, NA))
-  auxACP <- dataACP[, lapply(.SD, recodeFun, recodeTbl, recodeNA = 0), 
+  auxACP <- dataACP[, lapply(.SD, recodeFun, recodeTbl, recodeNA = 0),
                     .SDcols = colPCA[!colPCA %in% specCase]]
-  recodeTblII <- tibble(codOri = c(1:9, 156, 160, 474, 608, 97, 98, 
-                                   99, "r", 998, 999), 
-                        codFin = c(1:9, 156, 160, 474, 608, NA, NA, 
+  recodeTblII <- tibble(codOri = c(1:9, 156, 160, 474, 608, 97, 98,
+                                   99, "r", 998, 999),
+                        codFin = c(1:9, 156, 160, 474, 608, NA, NA,
                                    NA, NA, NA, NA))
-  auxACP <- cbind(auxACP, dataACP[, lapply(.SD, recodeFun, recodeTblII, 
+  auxACP <- cbind(auxACP, dataACP[, lapply(.SD, recodeFun, recodeTblII,
                                   recodeNA = 0), .SDcols = specCase])
   # #PCA
-  blockPCA <- prcomp(auxACP, scale = TRUE, center = TRUE)
+  ## prcomp(auxACP, scale = TRUE, center = TRUE)
+  blockPCA <- prcomp(auxACP, center = TRUE)
   # # Eigenvalues (Cumulative variances)
   eigDat   <- (blockPCA$sdev)^2
   variance <- cumsum(eigDat*100/sum(eigDat))
   indEig   <- min(which(variance >= 95))
   # # Capturar componentes
-  blockPCA <- cbind(dataACP[, .(SCHOOL_ID, STUDENT_ID)], 
+  blockPCA <- cbind(dataACP[, .(SCHOOL_ID, STUDENT_ID)],
                     blockPCA$x[, 1:indEig])
   return(blockPCA)
 }
@@ -269,15 +288,19 @@ pcaStudent <- function(dataACP, colID) {
 
 repSchool <- function(x) {
   nSt <- nrow(x)
-  x[["pseStrata"]] <- c(unlist(lapply(1:(nSt/2), rep, 2)), 
+  x[["pseStrata"]] <- c(unlist(lapply(1:(nSt/2), rep, 2)),
                             rep(floor(nSt/2), nSt %%2))
-  scddes <- svydesign(data = x[1:(nSt - (3 * (nSt %% 2))), ], 
-                      prob = ~weight, id = ~STUDENT_ID, 
-                      strata = ~pseStrata, nest = TRUE)
-  scd2fay <- as.svrepdesign(scddes, type="Fay", fay.rho=0.5, 
-                          hadamard.matrix=paley(79))
+  if (nSt > 3) {
+    scddes <- svydesign(data = x[1:(nSt - (3 * (nSt %% 2))), ],
+                        prob = ~weight, id = ~STUDENT_ID,
+                        strata = ~pseStrata, nest = TRUE)
+    scd2fay <- as.svrepdesign(scddes, type="Fay", fay.rho=0.5,
+                              hadamard.matrix=paley(79))
+  } else {
+    scd2fay <- list(repweights = list(weights = NULL))
+  }
   if (nSt %% 2 != 0) {
-    auxFay <- matrix(c(1.7071, 0.6464, 0.6464, 0.2929, 
+    auxFay <- matrix(c(1.7071, 0.6464, 0.6464, 0.2929,
                    1.3536, 1.3536), nrow = 3)
     weiDat <- x[(nSt - (3 * (nSt %% 2)) + 1):nSt, weight]
     auxFay <- sapply(2 - paley(79)[, 80], function(x) auxFay[, x] * weiDat)
@@ -285,14 +308,14 @@ repSchool <- function(x) {
   } else {
     auxFay <- scd2fay$repweights$weights
   }
-  auxFay <- cbind(x[, .(SCHOOL_ID, STUDENT_ID)], auxFay * x[, weight], 
+  auxFay <- cbind(x[, .(SCHOOL_ID, STUDENT_ID)], auxFay * x[, weight],
                  "Weight_81" =x[, weight])
   setnames(auxFay, names(auxFay), gsub("V(\\d+)", "Weight_\\1", names(auxFay)))
   return(auxFay)
 }
 
 
-transCal <- function(x, conMean, conDesv, desInt = 100, 
+transCal <- function(x, conMean, conDesv, desInt = 100,
                      meanInt = 500, consX = 1) {
   return (((consX * x - conMean) / conDesv) * 100 + 500)
 }
@@ -300,7 +323,7 @@ transCal <- function(x, conMean, conDesv, desInt = 100,
 
 calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID",
                            colsItems = "PR\\d+Q.+", anchorValues, consX,
-                           colsAuxil = c("^C\\d$", "^FAC\\d+$", "HISEI", 
+                           colsAuxil = c("^C\\d$", "^FAC\\d+$", "HISEI",
                                          "GENDER", "GRADE")) {
   bdTAM   <- data.frame(bdTAM)
   auxTest <- gsub("_PFS.txt",  "", nomSalida)
@@ -311,11 +334,11 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
   datReading[datReading == 6] <- NA                # Cambiar 6s a NA
   colsAuxil    <- rowSums(sapply(colsAuxil, function(x) names(bdTAM) %like% x)) == 1
   datAuxiliar  <- bdTAM[, colsAuxil]                # Variables Auxiliares
-  
+
   # # Filtrando parametros de ancla
   indValues    <- rowSums(sapply(names(datReading), function(x) anchorValues$item %like% x)) == 1
   if (any(!indValues)) {
-    warning("No se tuvieron en cuenta estos Ã?tems: \n", 
+    warning("No se tuvieron en cuenta estos Ã?tems: \n",
             anchorValues$item[!indValues],
             "\nExisten parametros internacionales que no se tienen encuenta (Se excluyen)")
   }
@@ -336,8 +359,8 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
   posPCM <- paste0(names(posPCM), "_Cat2")
   if (any(!posPCM %in% anchorValues[, "item"])) {
     colElim <- posPCM[!posPCM %in% anchorValues[, "item"]]
-    warning("Estos items son politomicos pero no tienen _Cat2 \n", 
-            paste(colElim, sep = "-"), 
+    warning("Estos items son politomicos pero no tienen _Cat2 \n",
+            paste(colElim, sep = "-"),
             "\n....Se excluyeron estos del conjunto de items (Se excluyen)")
     datReading   <- datReading[, !names(datReading) %in% colElim]
     anchorValues <- subset(anchorValues, !item %in% colElim)
@@ -346,30 +369,30 @@ calificaPrueba <- function(bdTAM, nomSalida, conMean, conDesv, colID = "Ã¯..ID
   # # Modelo tam
   anchorValues[, "id"] <- 1:nrow(anchorValues)
   anchorValues[, "tam"] <- anchorValues[, "xsi.TAM"]
-  model_R      <- tam(datReading, xsi.fixed = anchorValues[, c("id", "tam")], 
+  model_R      <- tam(datReading, xsi.fixed = anchorValues[, c("id", "tam")],
                      Y = datAuxiliar, pid = NULL)
   cat("----> Listo proceso de estimacion >_< \n")
-  
+
   # # Calcular valores plausibles
   readingPVs   <- tam.pv(model_R, nplausible = 5)
   cat("----> Listo proceso de VP >_< \n")
   pbaResult <- data.table(readingPVs$pv)
-  
+
   # # TransformaciÃ³n de los puntajes
   namesPV <- grep("^PV", names(pbaResult), value = T)
-  pbaResult <- cbind(colID, pbaResult[,  lapply(.SD, transCal, 
-                        conMean = conMean, conDesv = conDesv, consX = consX), 
+  pbaResult <- cbind(colID, pbaResult[,  lapply(.SD, transCal,
+                        conMean = conMean, conDesv = conDesv, consX = consX),
                         .SDcols = namesPV])
   pbaResult <- data.table(pbaResult)
   pbaResult <- pbaResult[, PV_Mean := apply(.SD, 1, mean), .SDcols = namesPV]
-  
+
   # # Archivo de salida valores plausibles
-  setnames(pbaResult, names(pbaResult), gsub("(PV\\d)(.+)", 
+  setnames(pbaResult, names(pbaResult), gsub("(PV\\d)(.+)",
            paste("\\1", auxTest, sep = "_"), names(pbaResult)))
   outScoring <- file.path(outPath, "Puntajes")
   dir.create(outScoring, showWarnings = FALSE)
   fileOut <- file.path(outScoring, nomSalida)
-  write.table(pbaResult, file = fileOut, sep = ";", dec = ",", 
+  write.table(pbaResult, file = fileOut, sep = ";", dec = ",",
               row.names = FALSE, col.names = TRUE)
   cat('----> Creacion de salida en el archivo"', fileOut, '" >_< \n', sep = "")
   return(pbaResult)
@@ -379,80 +402,75 @@ calificaIndice <- function(filACP, nomIndic = "MATHEFF",
                            anchorValues) {
   # Base con los resultados del cuestionario de estudiante
   filACP    <- data.frame(filACP)
-  
+
   # Filtrando parametros de ancla
   itemIndic <- filter(interIndic, Indice == nomIndic)
   if(nrow(itemIndic) == 0) {
     stop(" el índice (", nomIndic ,") NO existe")
   }
-    
+
   if(any(is.na(itemIndic[, "item"])) | any(is.na(itemIndic[, "item"]))) {
     stop(" el índice (", nomIndic ,") no tiene parámetros internacionales")
   }
   colsItems <- unique(substr(itemIndic[, "item"], 1, 8))
   # Filtrando parametros de cambio de escala
-  escalaWLE_Ind <- filter(escalaWLE, Indice == nomIndic)
+  escalaWLE <- filter(escalaWLE, Indice == nomIndic)
   datIndi   <- select(filACP, matches(colsItems)) # items para construir el índice
-  
+
   # Dirección de medición de los ítems
-  direc <- unique(itemIndic[, "direccion"]) 
-  
-  # Todos los ítems de los índices tienen 4 categorías
+  direc <- unique(itemIndic[, "direccion"])
+
+  # Cantidad de categorías de respuesta de los ítems del índice
+  # para realizar la recodificación
+  categ <- max(as.numeric(gsub(".+Cat(\\d)", "\\1",
+                               itemIndic[, "item"])))
 
   cat("----> Recodificando ítems de forma", direc, ":D \n")
-  # Recodificacion 
+  # Recodificacion
   if(direc == "INVERSA"){
-    recode_inv <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"), 
-                         codFin = c(3:0, NA, NA, NA, NA, NA, NA))    
-    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, 
-                     recode_inv, recodeNA = NA)
+    # TENER MUY EN CUENTA QUE LA RECODIFICACIÓN DEPENDE DE
+    # LA CANTIDAD DE CATEGORÍAS DE RESPUESTA DE LOS ÍTEMS
+    # DEL ÍNDICE
+
+    recode_inv <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"),
+                         codFin = c(categ:0, NA, NA, NA, NA, NA, NA))
+
+    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, recode_inv, recodeNA = NA)
   }
-  
+
   if(direc == "DIRECTA"){
-    recode_dir <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"), 
-                         codFin = c(0:3, NA, NA, NA, NA, NA, NA))
-    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, 
-                     recode_dir, recodeNA = NA)
+    # TENER MUY EN CUENTA QUE LA RECODIFICACIÓN DEPENDE DE
+    # LA CANTIDAD DE CATEGORÍAS DE RESPUESTA DE LOS ÍTEMS
+    # DEL ÍNDICE
+
+    recode_dir <- tibble(codOri = c(1:4, 5, 6, 7, 8, 9, "r"),
+                         codFin = c(0:categ, NA, NA, NA, NA, NA, NA))
+
+    datIndi <- apply(datIndi, MARGIN = 2, FUN = recodeFun, recode_inv, recodeNA = NA)
   }
-  
+
   # # Comprobando el numero de respuetas validas
   isValid <- rowSums(!is.na(datIndi)) >= 3
   anchorValues <- itemIndic[, "xsi.TAM"]
   anchorValues <- cbind(1:(length(anchorValues)) , anchorValues)
 
-  if(nomIndic == "DISCLICI") {
-  B.fixed    <- as.matrix(xlsx::read.xlsx(fileParam, sheetName = "discrim_DISCLICI",
-                      stringsAsFactors = FALSE, encoding = "UTF-8", header = FALSE))
-
-  Indi_model <- tam.mml.2pl(resp = datIndi[isValid, ]  , xsi.fixed = anchorValues,
-                             B.fixed = B.fixed, irtmodel = "GPCM")
-  Indi_wle   <- tam.mml.wle2(Indi_model)
-  valIndex   <- (Indi_wle$theta - escalaWLE_Ind[, "Mean"])/escalaWLE_Ind[, "SD"]
-  colID      <- filACP[isValid, c("SCHOOL_ID", "STUDENT_ID")]
-  valIndex   <- data.frame(colID, valIndex)
-  setnames(valIndex, 'valIndex', nomIndic)
-  
-  } else {
-
   # IRT model
   Indi_model <- tam(datIndi[isValid, ], xsi.fixed = anchorValues)
   Indi_wle   <- tam.wle(Indi_model)
-  valIndex   <- (Indi_wle$theta - escalaWLE_Ind[, "Mean"])/escalaWLE_Ind[, "SD"]
+  valIndex   <- (Indi_wle$theta - escalaWLE[, "Mean"])/escalaWLE[, "SD"]
   colID      <- filACP[isValid, c("SCHOOL_ID", "STUDENT_ID")]
   valIndex   <- data.frame(colID, valIndex)
   setnames(valIndex, 'valIndex', nomIndic)
-
-  }
   return(valIndex)
-} 
+  # write.table(EndResults,file="MATHEFF_12Actvity.csv",sep = ",",dec=".",row.names = FALSE, col.names = TRUE)
+}
 
- 
 multilevelPISA <- function(dat, pv, lvl, fixed, wgt){
   # Extrae registros con valores faltantes
   naCodes <- c("", "M", "N", "I")
-  condNA <- dat[eval(parse(text=fixed)) %in% naCodes, ]
+  condNA  <- dat[, eval(parse(text=fixed)) %in% naCodes]
+  condNA  <- condNA | dat[, is.na(eval(parse(text=fixed)))]
   dat <- dat[!condNA, ]
-
   dat[ ,"lvl"] <- dat[ , lvl, with = FALSE]
   dat[ ,"wgt"] <- dat[ , wgt, with = FALSE]
   datTemp <- dat %>%
@@ -463,11 +481,11 @@ multilevelPISA <- function(dat, pv, lvl, fixed, wgt){
 
   temp <- merge(dat, datTemp, by = lvl)
   # Ajuste de pesos
-  temp[, "std_wgt"] <- (temp[, wgt, with = FALSE] * temp[, nbre])/temp[, sumWgt]
+  temp[, "std_wgt"] <- (temp[, wgt, with = FALSE] * temp[, nbre]) / temp[, sumWgt]
 
   # temp <- full_join(dat, datTemp, by = lvl)
-  form <- formula(paste0(pv, " ~ ", fixed, " + (1|", lvl, ")"))
-  fit <- lmer(form, data = temp, weights=std_wgt, REML = FALSE)
+  form <- formula(paste0(pv, " ~ fixed + (1|lvl)"))
+  fit <- lmer(form, data = temp, weights=std_wgt, REML = FALSE )
   fijos <- as.numeric(fixef(fit))[1]
   randEffect <- ranef(fit, condVar = TRUE)[[1]]
   names(randEffect) <- "Intercept"
@@ -516,7 +534,7 @@ readerProfiles <- function(datInt, outPath){
   entender[, metasum := round(reScale(rowSums(.SD, na.rm = TRUE)/8, 0.60, 0.29), 4), .SDcols = grep("var", names(entender), value= T)]
 
   datOut <- cbind(idDat, dicomDat, recordar[, "undrem"], entender[, "metasum"])
-  write.table(datOut, file = file.path(outPath, "perfilLector.dat"), 
+  write.table(datOut, file = file.path(outPath, "perfilLector.dat"),
             sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
   return(datOut)
 }
@@ -531,45 +549,59 @@ readerProfiles <- function(datInt, outPath){
 ###################################
 # Códigos para el cálculo de ECSC
 ###################################
-                         
-computePARED <- function(dataACP, colPARED = c("X15.ST005", "X15.ST006.A", "X15.ST006.B", "X15.ST006.C",
-                                                "X15.ST007", "X15.ST008.A", "X15.ST008.B", "X15.ST008.C")){
+
+computePARED <- function(dataACP,
+                         colPARED = c("X15.ST005", "X15.ST006.A",
+                                      "X15.ST006.B", "X15.ST006.C",
+                                      "X15.ST007", "X15.ST008.A",
+                                      "X15.ST008.B", "X15.ST008.C")){
   dataACP <- data.table(dataACP)
   datPARED  <- dataACP[, colPARED, with = FALSE]
 
   # # Recodificación
-  # variables X15.ST005 y X15.ST007 
+  # variables X15.ST005 y X15.ST007
   # Cuestionario                | ISCED | Recodificación
-  # -------------------------------------------------------             
+  # -------------------------------------------------------
   # No completo primaria        | None  | 0
   # Básica primaria             | 1     | 1
   # Básica secundaria (6 - 9)   | 2     | 2
   # Educación media (10 - 11)   | 3A    | 4
 
-  recode1 <- tibble(codOri = c(4:1, 5, 6, 7, 8, 9, "r"), 
+  recode1 <- tibble(codOri = c(4:1, 5, 6, 7, 8, 9, "r"),
                          codFin = c(0, 1, 2, 4, NA, NA, NA, NA, NA, NA))
-  datIndi <- apply(datPARED[, c("X15.ST005", "X15.ST007")], MARGIN = 2,
+
+  #datPARED[, c("X15.ST005", "X15.ST007")]
+
+  datIndi <- apply(datPARED[, .(X15.ST005, X15.ST007)], MARGIN = 2,
                    FUN = recodeFun, recode1, recodeNA = NA)
 
-  recode2 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"), 
+  recode2 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"),
                          codFin = c(6, 0, NA, NA, NA, NA))
-  datIndi2 <- apply(datPARED[, c("X15.ST006.A", "X15.ST008.A", "X15.ST006.B", "X15.ST008.B")],
+
+  # datPARED[, c("X15.ST006.A", "X15.ST008.A", "X15.ST006.B", "X15.ST008.B")],
+  datIndi2 <-
+    apply(datPARED[, .(X15.ST006.A, X15.ST008.A, X15.ST006.B, X15.ST008.B)],
                     MARGIN = 2, FUN = recodeFun, recode2, recodeNA = NA)
 
-  recode3 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"), 
+  recode3 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"),
                          codFin = c(5, 0, NA, NA, NA, NA))
-  datIndi3 <- apply(datPARED[, c("X15.ST006.C", "X15.ST008.C")], MARGIN = 2,
+
+  #datPARED[, c("X15.ST006.C", "X15.ST008.C")]
+  datIndi3 <- apply(datPARED[, .(X15.ST006.C, X15.ST008.C)], MARGIN = 2,
                      FUN = recodeFun, recode3, recodeNA = NA)
 
   datPARED_recod <- data.frame(cbind(datIndi, datIndi2, datIndi3))
-  datPARED_recod[, "HISCED"] <- apply(datPARED_recod, MARGIN = 1,
-                               FUN = max, na.rm = TRUE)
-  
-  colID          <- dataACP[, c("SCHOOL_ID", "STUDENT_ID")]
-  datPARED_recod <- data.frame(colID, datPARED_recod)
-  datPARED_recod <- merge(datPARED_recod, escalaPARED[, c("HISCED", "PARED")])
 
-  PARED       <- datPARED_recod[, c("SCHOOL_ID", "STUDENT_ID", "PARED")]
+  datPARED_recod[, "HISCED"] <- apply(datPARED_recod, MARGIN = 1,
+                               function(x) max(as.numeric(x), na.rm =
+                                               TRUE))
+
+  colID          <- dataACP[, .(SCHOOL_ID, STUDENT_ID)]
+  datPARED_recod <- cbind(colID, datPARED_recod)
+  datPARED_recod <- merge(datPARED_recod,
+                          escalaPARED[, c("HISCED", "PARED")],
+                          by = "HISCED")
+  PARED       <- datPARED_recod[, .(SCHOOL_ID, STUDENT_ID, PARED)]
   return(PARED)
 }
 
@@ -580,41 +612,41 @@ computeHOMEPOS <- function(dataACP, colHOMESPOS = c("X15.ST011", "X15.ST012", "X
 
   require(dplyr)
   dat1    <- select(dataACP, starts_with("X15.ST011"))
-  recode1 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"), 
+  recode1 <- tibble(codOri = c(1, 2, 7, 8, 9, "r"),
                          codFin = c(1, 0, NA, NA, NA, NA))
   datIndi1 <- apply(dat1, MARGIN = 2,
                    FUN = recodeFun, recode1, recodeNA = NA)
 
   dat2 <- select(dataACP, starts_with("X15.ST012"))
-  recode2 <- tibble(codOri = c(1:4, 7, 8, 9, "r"), 
+  recode2 <- tibble(codOri = c(1:4, 7, 8, 9, "r"),
                          codFin = c(0, 1, 2, 3, NA, NA, NA, NA))
   datIndi2 <- apply(dat2, MARGIN = 2,
                    FUN = recodeFun, recode2, recodeNA = NA)
 
   dat3 <- select(dataACP, starts_with("X15.ST013"))
-  recode3 <- tibble(codOri = c(1:6, 7, 8, 9, "r"), 
+  recode3 <- tibble(codOri = c(1:6, 7, 8, 9, "r"),
                          codFin = c(0:5, NA, NA, NA, NA))
   datIndi3 <- apply(dat3, MARGIN = 2,
                    FUN = recodeFun, recode3, recodeNA = NA)
 
   datHOMEPOS <- cbind(datIndi1, datIndi2, datIndi3)
-  
+
   #Fix difficulty parameters
-  anchorValues <- xlsx::read.xlsx("../input/PBTS_InternationalParameters.xlsx",
+  anchorValues <- xlsx::read.xlsx("../input/oecd/PBTS_InternationalParameters.xlsx",
                                   sheetName = "dif_HOMEPOS", stringsAsFactors = FALSE,
                                    encoding = "UTF-8")
-  
+
   #Fix discrimination parameters
-  B.fixed <- as.matrix(xlsx::read.xlsx("../input/PBTS_InternationalParameters.xlsx",
+  B.fixed <- as.matrix(xlsx::read.xlsx("../input/oecd/PBTS_InternationalParameters.xlsx",
                                   sheetName = "discrim_HOMEPOS", stringsAsFactors = FALSE,
-                                   encoding = "UTF-8"))
+                                   encoding = "UTF-8", header = FALSE))
 
   # GPCM Model
   model <- tam.mml.2pl(resp = datHOMEPOS, xsi.fixed = anchorValues,
                 B.fixed = B.fixed, irtmodel = "GPCM")
-  
+
   HOMEPOSwle <- tam.wle(model)
-  colID      <- dataACP[, c("SCHOOL_ID", "STUDENT_ID")]
+  colID      <- dataACP[, .(SCHOOL_ID, STUDENT_ID)]
 
   HOMEPOS        <- cbind(colID, HOMEPOSwle$theta)
   names(HOMEPOS) <-  c("SCHOOL_ID", "STUDENT_ID", "HOMEPOS")
@@ -622,19 +654,20 @@ computeHOMEPOS <- function(dataACP, colHOMESPOS = c("X15.ST011", "X15.ST012", "X
   return(HOMEPOS)
 }
 
-computeECSC <- function(bdTAM, colECSC = c("HISEI", "PARED", "HOMEPOS")){
+
+computeECSC <- function(bdTAM){
 
   colID   <- bdTAM[, c("SCHOOL_ID", "STUDENT_ID")]
-  datECSC <- bdTAM[, colECSC] # items para construir el índice
+  datECSC <- bdTAM[, c("HISEI", "PARED", "HOMEPOS")] # items para construir el índice
 
   # AQUI LA REGRESIÓN PARA IMPUTAR !!
 
   HISEI_  <- (bdTAM[, "HISEI"] - 51.5) / 21.98
   PARED_  <- (bdTAM[, "PARED"] - 13.85) / 3.08
 
-  ESCS    <- (0.81*HISEI_ + 0.78*PARED_ + 0.80*bdTAM[, "HOMEPOS"])/1.915 
+  ESCS    <- (0.81*HISEI_ + 0.78*PARED_ + 0.80*bdTAM[, "HOMEPOS"])/1.915
   ESCS    <- cbind(colID, ESCS)
 
   return(ESCS)
 }
-                         
+
