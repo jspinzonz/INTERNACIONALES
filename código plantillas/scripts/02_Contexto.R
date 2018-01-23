@@ -43,6 +43,7 @@ datOut[, SCHOOL_ID := sprintf("%0.3d", SCHOOL_ID)]
 #Base_puntuada <- read_excel(filenameBasePuntuada)
 Base_contexto <- read_delim(filenameBasePuntuada, ";", escape_double = FALSE, trim_ws = TRUE)
 Base_contexto <- merge(Base_contexto, datOut, by = c("SCHOOL_ID", "STUDENT_ID"))
+Base_contexto[, "nationality"] <- "COL"
 
 StdQ_golddataset17_1 <- as.data.frame(StdQ_golddataset17_1) # es necesario?
 StdQ_golddataset17_2 <- as.data.frame(StdQ_golddataset17_2)
@@ -63,8 +64,6 @@ for(ii in StdQ_golddataset17_2[,"Match_Name"]){
     }
   }
 }
-
-
 
 ################################################################################
 # # Agregando información de sobre pesos y plausibles
